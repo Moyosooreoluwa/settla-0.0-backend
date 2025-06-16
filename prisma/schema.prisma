@@ -25,16 +25,16 @@ model User {
   verification_docs String[]
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
-  Properties       Property[]
-  saved_properties String[]  @default([])
-  // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
+  properties       Property[]     @relation("UserProperties") // properties this user owns (agent)
+  saved_properties  Property[]     @relation("SavedProperties")  
+// Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
   // subscriptionId   String?
 }
 
 
 model Property {
   id             String    @id @default(uuid())
-  agent          User?      @relation(fields: [agentId], references: [id])
+  agent       User?      @relation("UserProperties", fields: [agentId], references: [id])  
   agentId        String?
   // agent          User      @relation(fields: [agentId], references: [id])
   // agentId        String
@@ -63,6 +63,8 @@ model Property {
   street    String
   city      String
   state     String
+ savedBy     User[]    @relation("SavedProperties")
+
 }
 
 // model PropertyImage {
