@@ -1,0 +1,125 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(uuid())
+  name             String
+  email            String         @unique
+  password_hash    String
+  role             UserRole
+  phone_number     String?
+  profile_picture  String?
+  is_verified      Boolean        @default(false)
+  verification_docs String[]
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @updatedAt
+  Properties       Property[]
+  saved_properties String[]  @default([])
+  // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
+  // subscriptionId   String?
+}
+
+
+model Property {
+  id             String    @id @default(uuid())
+  agent          User?      @relation(fields: [agentId], references: [id])
+  agentId        String?
+  // agent          User      @relation(fields: [agentId], references: [id])
+  // agentId        String
+  title          String
+  description    String
+  bedrooms       Int
+  bathrooms      Int
+  toilets        Int
+  size_sqm       Float
+  price          Float
+  discount_percent Float?
+  discounted_price Float?
+  // address        String
+  // location       String
+  property_type  PropertyType
+  listing_type   ListingType
+  furnishing     Furnishing
+  availability   String?
+  status         PropertyStatus
+  amenities      String[]
+  date_added     DateTime @default(now())
+  date_modified  DateTime @updatedAt
+  is_approved    Boolean  @default(false)
+  images         String[]
+  // images         PropertyImage[]
+  street    String
+  city      String
+  state     String
+}
+
+// model PropertyImage {
+//   id          String   @id @default(uuid())
+//   property    Property @relation(fields: [propertyId], references: [id])
+//   propertyId  String
+//   image_url   String
+//   sort_order  Int
+// }
+// model Subscription {
+//   id          String     @id @default(uuid())
+//   agent       User       @relation
+//   tier        SubscriptionTier
+//   is_active   Boolean    @default(true)
+//   start_date  DateTime   @default(now())
+//   end_date    DateTime
+//   renewed_at  DateTime?
+//   created_at  DateTime   @default(now())
+// }
+
+enum UserRole {
+  buyer
+  agent
+  admin
+}
+
+enum PropertyType {
+  apartment
+  detached
+  semi_detached
+  terrace
+  land
+}
+
+enum ListingType {
+  sale
+  rent
+  shortlet
+}
+
+enum Furnishing {
+  furnished
+  unfurnished
+  partly_furnished
+}
+
+enum PropertyStatus {
+  available
+  sold
+  rented
+}
+
+
+enum SubscriptionTier {
+  basic
+  premium
+  enterprise
+}
+
+
