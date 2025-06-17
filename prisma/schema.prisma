@@ -53,7 +53,7 @@ model Property {
   amenities      String[]
   date_added     DateTime @default(now())
   date_modified  DateTime @updatedAt
-  is_approved    Boolean  @default(false)
+  approval_status    ApprovalStatus @default(pending)
   images         String[]
   street    String
   city      String
@@ -126,6 +126,11 @@ enum SubscriptionTier {
   basic
   premium
   enterprise
+}
+enum ApprovalStatus {
+  approved
+  pending
+  rejected
 }
 
 

@@ -1,8 +1,17 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
-import { UserRole } from '@prisma/client'; // Use your Prisma enum
+import { UserRole } from '@prisma/client';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_default_secret'; // Use env for production!
+const JWT_SECRET = process.env.JWT_SECRET || 'your_default_secret';
+// TODO Use env for production!
+
+export interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    role: UserRole;
+    // You can add more fields as needed
+  };
+}
 
 export interface TokenPayload {
   id: string;
@@ -52,9 +61,22 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Check for Agent
-export const isAgent = (req: Request, res: Response, next: NextFunction) => {
-  if (req.user?.role === 'agent') {
+// export const isAgent = (req: AuthRequest, res: Response, next: NextFunction) => {
+//   if (req.user?.role === 'agent') {
+//     return next();
+//   }
+//   return res.status(403).json({ message: 'Agent access required' });
+// };
+export const isAgent = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const user = req.user;
+
+  if (user?.role === 'agent') {
     return next();
   }
-  return res.status(403).json({ message: 'Agent access required' });
+
+  res.status(403).json({ message: 'Agent access required' });
 };

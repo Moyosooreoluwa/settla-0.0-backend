@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import userRouter from './routes/userRoutes';
 import seedRouter from './routes/seedRoutes';
 import propertyRouter from './routes/propertyRoutes';
+import agentRouter from './routes/agentRoutes';
 
 dotenv.config();
 const app = express();
@@ -18,6 +19,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/users', userRouter);
+app.use('/api/agents', agentRouter);
 app.use('/api/properties', propertyRouter);
 app.use('/api/seed', seedRouter);
 
