@@ -457,4 +457,38 @@ userRouter.delete(
   })
 );
 
+// Get saved Properties
+userRouter.get(
+  '/saved-properties',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401);
+      throw new Error('User not authenticated');
+    }
+
+    const userWithSaved = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        saved_properties: {
+          // include: {
+          //   agent: {
+          //     select: { id: true, name: true, email: true } // Optional: show agent info
+          //   }
+          // }
+        },
+      },
+    });
+
+    if (!userWithSaved) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    res.json(userWithSaved.saved_properties);
+  })
+);
+
 export default userRouter;
