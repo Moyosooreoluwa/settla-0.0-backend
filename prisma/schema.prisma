@@ -21,23 +21,22 @@ model User {
   role             UserRole
   phone_number     String?
   profile_picture  String?
-  is_verified      Boolean        @default(false)
-  verification_docs String[]
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
-  properties       Property[]     @relation("UserProperties") // properties this user owns (agent)
-  saved_properties  Property[]     @relation("SavedProperties")  
-// Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
+  saved_properties  Property[]     @relation("saved_properties")  
+  // For Agents
+  is_verified      Boolean        @default(false)
+  verification_docs String[]
+  properties       Property[]     @relation("user_properties") // properties this user owns (agent)
+  // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
   // subscriptionId   String?
 }
 
 
 model Property {
   id             String    @id @default(uuid())
-  agent       User?      @relation("UserProperties", fields: [agentId], references: [id])  
+  agent       User?      @relation("user_properties", fields: [agentId], references: [id])  
   agentId        String?
-  // agent          User      @relation(fields: [agentId], references: [id])
-  // agentId        String
   title          String
   description    String
   bedrooms       Int
@@ -47,23 +46,27 @@ model Property {
   price          Float
   discount_percent Float?
   discounted_price Float?
-  // address        String
-  // location       String
   property_type  PropertyType
   listing_type   ListingType
   furnishing     Furnishing
-  availability   String?
   status         PropertyStatus
   amenities      String[]
   date_added     DateTime @default(now())
   date_modified  DateTime @updatedAt
   is_approved    Boolean  @default(false)
   images         String[]
-  // images         PropertyImage[]
   street    String
   city      String
   state     String
- savedBy     User[]    @relation("SavedProperties")
+  parking_spaces  Int?
+ saved_by     User[]    @relation("saved_properties")
+
+//  For Rentals
+  availability   String?
+  tenancy_info String?
+  service_charge String?
+  min_tenancy String?
+  deposit Float?
 
 }
 
@@ -115,6 +118,7 @@ enum PropertyStatus {
   available
   sold
   rented
+  unavailable
 }
 
 

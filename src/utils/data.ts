@@ -131,11 +131,18 @@ const data = {
       property_type: 'apartment' as PropertyType,
       listing_type: 'rent' as ListingType,
       furnishing: 'furnished' as Furnishing,
-      status: 'available' as PropertyStatus,
+      status: 'unavailable' as PropertyStatus,
       street: 'Glover Road',
       city: 'Ikoyi',
       state: 'Lagos',
       images: ['/images/listing5.jpg', '/images/listing6.jpg'],
+      parking_spaces: 4,
+      tenancy_info:
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aliquam quis quam et consequat. Donec risus velit, vestibulum at dapibus sed, rhoncus sit amet ligula. Cras accumsan ante finibus diam fringilla, nec ultricies ex semper. Cras imperdiet tortor in consequat facilisis. Aliquam eleifend gravida urna eu porttitor. Mauris augue ante, euismod ac ullamcorper et, interdum a neque. Vestibulum augue felis, malesuada ut eleifend a, pharetra vitae massa. Aenean scelerisque id ipsum non faucibus. Integer id metus nec eros sollicitudin rhoncus vel et velit. Proin sagittis eleifend ipsum, nec iaculis dolor laoreet elementum. Donec ante velit, mattis quis turpis ut, maximus vestibulum nibh. Nam volutpat rutrum nibh, vel finibus tortor auctor non.',
+
+      service_charge: '1000000',
+      min_tenancy: '1 year',
+      deposit: 1000000,
     },
     {
       title: '5 Bedroom House for Sale in Banana Island',
@@ -191,37 +198,6 @@ const data = {
       state: 'Lagos',
       images: ['/images/listing8.jpg', '/images/listing5.jpg'],
     },
-
-    // {
-    //   id: '680865753756596',
-    //   // agent   :       "975884860876098",
-    //   // agent: '975884860876098',
-    //   agentId: '975884860876098',
-    //   title: '3 Bedroom Apartment For Sale',
-    //   description:
-    //     'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aliquam quis quam et consequat. Donec risus velit, vestibulum at dapibus sed, rhoncus sit amet ligula. Cras accumsan ante finibus diam fringilla, nec ultricies ex semper. Cras imperdiet tortor in consequat facilisis. Aliquam eleifend gravida urna eu porttitor. Mauris augue ante, euismod ac ullamcorper et, interdum a neque. Vestibulum augue felis, malesuada ut eleifend a, pharetra vitae massa. Aenean scelerisque id ipsum non faucibus. Integer id metus nec eros sollicitudin rhoncus vel et velit. Proin sagittis eleifend ipsum, nec iaculis dolor laoreet elementum. Donec ante velit, mattis quis turpis ut, maximus vestibulum nibh. Nam volutpat rutrum nibh, vel finibus tortor auctor non. Donec a volutpat ipsum. Proin ullamcorper tellus felis, nec fermentum augue auctor id. Pellentesque ac molestie enim, eget feugiat ipsum.',
-    //   bedrooms: 3,
-    //   bathrooms: 3,
-    //   toilets: 4,
-    //   size_sqm: 495.97,
-    //   price: 200000000.0,
-    //   // discount_percent Float?
-    //   // discounted_price Float?
-
-    //   property_type: 'apartment' as PropertyType,
-    //   listing_type: 'sale' as ListingType,
-    //   furnishing: 'furnished' as Furnishing,
-    //   // availability:   String?
-    //   status: 'available' as PropertyStatus,
-    //   // amenities  :    String[]
-    //   // date_added  :   DateTime @default(now())
-    //   // date_modified : DateTime @updatedAt
-    //   // is_approved  :  Boolean  @default(false)
-    //   // images        : PropertyImage[]
-    //   street: 'Saka Jojo',
-    //   city: 'Victoria Island',
-    //   state: 'Lagos',
-    // },
   ],
 };
 
