@@ -144,4 +144,130 @@ agentRouter.get(
   })
 );
 
+// Get a listing
+
+agentRouter.get(
+  '/properties/:id',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const propertyId = req.params.id;
+
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      include: {
+        agent: {},
+      }, // include agent info if needed
+    });
+
+    if (!property) {
+      res.status(404);
+      throw new Error('Property not found');
+    }
+
+    res.json(property);
+  })
+);
+
+// Add Listing
+agentRouter.post(
+  '/properties',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const {
+      title,
+      description,
+      bedrooms,
+      bathrooms,
+      toilets,
+      size_sqm,
+      price,
+      discount_percent,
+      discounted_price,
+      property_type,
+      listing_type,
+      furnishing,
+      status,
+      amenities,
+      images,
+      street,
+      city,
+      state,
+      availability,
+      tenancy_info,
+      service_charge,
+      min_tenancy,
+      deposit,
+    } = req.body;
+
+    const agentId = req.user?.id; // from isAuth middleware
+
+    const newProperty = await prisma.property.create({
+      data: {
+        title,
+        description,
+        bedrooms,
+        bathrooms,
+        toilets,
+        size_sqm,
+        price,
+        discount_percent,
+        discounted_price,
+        property_type,
+        listing_type,
+        furnishing,
+        status,
+        amenities,
+        images,
+        street,
+        city,
+        state,
+        availability,
+        tenancy_info,
+        service_charge,
+        min_tenancy,
+        deposit,
+        agent: { connect: { id: agentId } }, // Link to Agent (User)
+      },
+    });
+
+    res.status(201).json(newProperty);
+  })
+);
+
+// Edit listing
+agentRouter.put(
+  '/properties/:id',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const propertyId = req.params.id;
+    const agentId = req.user?.id;
+
+    // Verify that the property belongs to this agent
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+
+    if (!property) {
+      res.status(404);
+      throw new Error('Property not found');
+    }
+
+    if (property.agentId !== agentId) {
+      res.status(403);
+      throw new Error('Not authorized to edit this property');
+    }
+
+    // Update property
+    const updatedProperty = await prisma.property.update({
+      where: { id: propertyId },
+      data: { ...req.body }, // Updates only fields provided in the request body
+    });
+
+    res.json(updatedProperty);
+  })
+);
+
 export default agentRouter;

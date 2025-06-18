@@ -39,9 +39,9 @@ model Property {
   agentId        String?
   title          String
   description    String
-  bedrooms       Int
-  bathrooms      Int
-  toilets        Int
+  bedrooms       String
+  bathrooms      String
+  toilets        String
   size_sqm       Float
   price          Float
   discount_percent Float?
@@ -58,7 +58,7 @@ model Property {
   street    String
   city      String
   state     String
-  parking_spaces  Int?
+  parking_spaces  String?
  saved_by     User[]    @relation("saved_properties")
 
 //  For Rentals
