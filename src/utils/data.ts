@@ -62,7 +62,9 @@ const data = {
       street: 'Joel Ogunaike',
       city: 'Ikeja',
       state: 'Lagos',
-      images: ['/images/listing.jpg', '/images/listing2.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       // id: '680865753756596',
@@ -83,7 +85,9 @@ const data = {
       street: 'Saka Jojo',
       city: 'Victoria Island',
       state: 'Lagos',
-      images: ['/images/listing3.jpg', '/images/listing2.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       title: 'Luxury 3 Bedroom Apartment in Victoria Island',
@@ -102,7 +106,9 @@ const data = {
       street: 'Muri Okunola',
       city: 'Victoria Island',
       state: 'Lagos',
-      images: ['/images/listing7.jpg', '/images/listing1.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       title: '5-Bedroom Detached Duplex in Lekki',
@@ -121,7 +127,9 @@ const data = {
       street: 'Admiralty Way',
       city: 'Lekki',
       state: 'Lagos',
-      images: ['/images/listing4.jpg', '/images/listing3.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       title: 'Modern 2-Bedroom Flat for Rent in Ikoyi',
@@ -140,7 +148,9 @@ const data = {
       street: 'Glover Road',
       city: 'Ikoyi',
       state: 'Lagos',
-      images: ['/images/listing5.jpg', '/images/listing6.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
       tenancy_info:
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aliquam quis quam et consequat. Donec risus velit, vestibulum at dapibus sed, rhoncus sit amet ligula. Cras accumsan ante finibus diam fringilla, nec ultricies ex semper. Cras imperdiet tortor in consequat facilisis. Aliquam eleifend gravida urna eu porttitor. Mauris augue ante, euismod ac ullamcorper et, interdum a neque. Vestibulum augue felis, malesuada ut eleifend a, pharetra vitae massa. Aenean scelerisque id ipsum non faucibus. Integer id metus nec eros sollicitudin rhoncus vel et velit. Proin sagittis eleifend ipsum, nec iaculis dolor laoreet elementum. Donec ante velit, mattis quis turpis ut, maximus vestibulum nibh. Nam volutpat rutrum nibh, vel finibus tortor auctor non.',
 
@@ -165,7 +175,9 @@ const data = {
       street: 'Banana Island',
       city: 'Ikoyi',
       state: 'Lagos',
-      images: ['/images/listing7.jpg', '/images/listing8.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       title: '3-Bedroom Terrace House in GRA',
@@ -184,7 +196,9 @@ const data = {
       street: 'Eleke Crescent',
       city: 'GRA',
       state: 'Ikeja',
-      images: ['/images/listing9.jpg', '/images/listing10.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
     {
       title: 'Luxury Shortlet Apartment in Eko Atlantic',
@@ -203,7 +217,9 @@ const data = {
       street: 'Eko Boulevard',
       city: 'Eko Atlantic',
       state: 'Lagos',
-      images: ['/images/listing8.jpg', '/images/listing5.jpg'],
+      images: [
+        'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
+      ],
     },
   ],
 };
