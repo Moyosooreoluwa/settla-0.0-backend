@@ -6,6 +6,7 @@ import userRouter from './routes/userRoutes';
 import seedRouter from './routes/seedRoutes';
 import propertyRouter from './routes/propertyRoutes';
 import agentRouter from './routes/agentRoutes';
+import uploadRouter from './routes/uploadRoutes';
 
 dotenv.config();
 const app = express();
@@ -21,6 +22,7 @@ app.get('/', (req, res) => {
 app.use('/api/users', userRouter);
 app.use('/api/agents', agentRouter);
 app.use('/api/properties', propertyRouter);
+app.use('/api/upload', uploadRouter);
 app.use('/api/seed', seedRouter);
 
 // app.use((err, req, res, next) => {
@@ -32,4 +34,4 @@ app.use('/api/seed', seedRouter);
 // });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
