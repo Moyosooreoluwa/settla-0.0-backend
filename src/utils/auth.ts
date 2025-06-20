@@ -53,11 +53,16 @@ export const isAuth = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Check for Admin
-export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
+export const isAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const user = req.user;
   if (req.user?.role === 'admin') {
     return next();
   }
-  return res.status(403).json({ message: 'Admin access required' });
+  res.status(403).json({ message: 'Admin access required' });
 };
 
 // Check for Agent

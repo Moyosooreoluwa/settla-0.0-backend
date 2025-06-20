@@ -53,26 +53,7 @@ agentRouter.post(
   })
 );
 
-// Get all Properties owned by Agent
 // TODO ADD PAGINATION
-// agentRouter.get(
-//   '/properties',
-//   isAuth,
-//   isAgent,
-//   asyncHandler(async (req, res) => {
-//     const agentId = req.user?.id;
-
-//     if (!agentId) {
-//       res.status(401).send({ message: 'User not authenticated' });
-//     }
-//     const properties = await prisma.property.findMany({
-//       where: { agentId: agentId },
-//       orderBy: { date_added: 'desc' },
-//     });
-
-//     res.json(properties);
-//   })
-// );
 
 agentRouter.get(
   '/properties',
