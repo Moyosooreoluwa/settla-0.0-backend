@@ -118,6 +118,55 @@ adminRouter.get(
   })
 );
 
+//get an agent
+adminRouter.get(
+  '/agents/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const agentId = req.params.id;
+
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId, role: 'agent' },
+    });
+
+    if (!agent) {
+      res.status(404);
+      throw new Error('Agent not found');
+    }
+
+    res.json(agent);
+  })
+);
+
+//verify an agent
+
+adminRouter.put(
+  '/agents/:id/verify',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const agentId = req.params.id;
+    const { is_verified } = req.body;
+
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId, role: 'agent' },
+    });
+
+    if (!agent) {
+      res.status(404);
+      throw new Error('Agent not found');
+    }
+    const updatedAgent = await prisma.user.update({
+      where: { id: agentId },
+      data: {
+        is_verified: is_verified,
+      },
+    });
+    res.json(updatedAgent);
+  })
+);
+
 // get all properties
 adminRouter.get(
   '/properties',
@@ -197,6 +246,60 @@ adminRouter.get(
       totalItems,
       page: pageNumber,
       pages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+//get a property
+adminRouter.get(
+  '/properties/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const propertyId = req.params.id;
+
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      include: {
+        agent: {},
+      }, // include agent info if needed
+    });
+
+    if (!property) {
+      res.status(404);
+      throw new Error('Property not found');
+    }
+
+    res.json(property);
+  })
+);
+
+// approve/reject a property
+adminRouter.patch(
+  '/properties/:id/approval',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { approval_status, approval_notes } = req.body;
+
+    if (!['pending', 'approved', 'rejected'].includes(approval_status)) {
+      res.status(400);
+      throw new Error('Invalid approval status');
+    }
+
+    const property = await prisma.property.update({
+      where: { id },
+      data: {
+        approval_status,
+        approval_notes,
+      },
+    });
+    //TODO send notification
+
+    res.status(200).json({
+      message: `Property status updated to ${approval_status}`,
+      property,
     });
   })
 );

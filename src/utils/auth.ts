@@ -85,3 +85,16 @@ export const isAgent = (
 
   res.status(403).json({ message: 'Agent access required' });
 };
+export const isAgentOrAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const user = req.user;
+
+  if (user?.role === 'agent' || user?.role === 'admin') {
+    return next();
+  }
+
+  res.status(403).json({ message: 'Admin or Agent access required' });
+};

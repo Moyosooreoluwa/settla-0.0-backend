@@ -26,7 +26,7 @@ model User {
   saved_properties  Property[]     @relation("saved_properties")  
   // For Agents
   is_verified      Boolean        @default(false)
-  verification_docs String[]
+  verification_docs Json?          // Changed to JSON
   properties       Property[]     @relation("user_properties") // properties this user owns (agent)
   // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
   // subscriptionId   String?
@@ -53,13 +53,14 @@ model Property {
   amenities      String[]
   date_added     DateTime @default(now())
   date_modified  DateTime @updatedAt
-  approval_status    ApprovalStatus @default(pending)
   images         String[]
   street    String
   city      String
   state     String
   parking_spaces  String?
  saved_by     User[]    @relation("saved_properties")
+  approval_status    ApprovalStatus @default(pending)
+  approval_notes String?
 
 //  For Rentals
   availability   String?
@@ -70,13 +71,7 @@ model Property {
 
 }
 
-// model PropertyImage {
-//   id          String   @id @default(uuid())
-//   property    Property @relation(fields: [propertyId], references: [id])
-//   propertyId  String
-//   image_url   String
-//   sort_order  Int
-// }
+
 // model Subscription {
 //   id          String     @id @default(uuid())
 //   agent       User       @relation
@@ -120,7 +115,6 @@ enum PropertyStatus {
   rented
   unavailable
 }
-
 
 enum SubscriptionTier {
   basic

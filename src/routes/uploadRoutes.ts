@@ -2,7 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import express, { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
-import { isAgent, isAuth } from '../utils/auth';
+import { isAgent, isAgentOrAdmin, isAuth } from '../utils/auth';
 
 cloudinary.config({
   // TODO CREATE ONE FOR SETTLA
@@ -19,7 +19,7 @@ const uploadRouter = express.Router();
 uploadRouter.post(
   '/image',
   isAuth,
-  isAgent,
+  isAgentOrAdmin,
   upload.single('file'),
   asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const file = req.file as Express.Multer.File; // ✅ Type assertion here
@@ -47,6 +47,7 @@ uploadRouter.post(
 uploadRouter.post(
   '/pdf',
   isAuth,
+  isAgentOrAdmin,
   upload.single('file'),
   asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const file = req.file as Express.Multer.File; // ✅ Type assertion here
@@ -67,7 +68,12 @@ uploadRouter.post(
       uploadStream.end(file.buffer);
     });
 
-    res.status(200).json({ url: (result as any).secure_url });
+    res
+      .status(200)
+      .json({
+        secure_url: (result as any).secure_url,
+        file_name: file.originalname,
+      });
   })
 );
 

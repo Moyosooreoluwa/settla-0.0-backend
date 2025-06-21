@@ -11,6 +11,68 @@ const agentRouter = express.Router();
 
 // Agent Routes
 
+agentRouter.post(
+  '/signup',
+  asyncHandler(async (req, res) => {
+    const {
+      name,
+      email,
+      password,
+      phone_number,
+      profile_picture,
+      // bio,
+      verification_docs,
+    } = req.body;
+
+    if (!name || !email || !password || !phone_number) {
+      res.status(400).send({ message: 'All fields are required' });
+      return; // Added return
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+
+    if (existingUser) {
+      res.status(400).send({ message: 'User already exists' });
+      return; // Added return
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        phone_number,
+        password_hash: hashedPassword,
+        role: 'agent',
+        profile_picture: profile_picture || 'https://github.com/shadcn.png',
+        verification_docs: verification_docs || [],
+        is_verified: false,
+        // bio
+      },
+    });
+
+    const token = generateToken({ id: newUser.id, role: newUser.role });
+
+    res.status(201).json({
+      message: 'User registered successfully, pending verification review',
+      isSignedIn: true,
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        phone_number: newUser.phone_number,
+        role: newUser.role,
+        profile_picture: newUser.profile_picture,
+        verification_docs: newUser.verification_docs,
+        is_verified: newUser.is_verified,
+        // bio: newUser.bio
+      },
+      token,
+    });
+  })
+);
+
 // Agent Sign in
 agentRouter.post(
   '/signin',
@@ -30,6 +92,13 @@ agentRouter.post(
       res.status(400).send({ message: 'Unauthorised' });
       //   return; // Added return to stop execution
     }
+    // if (!user.is_verified) {
+    //   res
+    //     .status(400)
+    //     .send({ message: 'Unauthorised. Please wait for Verification ' });
+    //   //Please wait for verification
+    //   //   return; // Added return to stop execution
+    // }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
@@ -46,6 +115,7 @@ agentRouter.post(
         role: user.role,
         profile_picture: user.profile_picture,
         phone_number: user.phone_number,
+        is_verified: user.is_verified,
       },
       token,
       isSignedIn: true,
@@ -53,8 +123,83 @@ agentRouter.post(
   })
 );
 
-// TODO ADD PAGINATION
+//Get user info
+agentRouter.get(
+  '/profile/',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const agentId = req.user.id;
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId },
+    });
 
+    if (!agent) {
+      throw new Error('No Agent found');
+      return; // Added return to stop execution
+    }
+
+    res.json(agent);
+  })
+);
+
+//edit profile
+
+agentRouter.put(
+  '/profile',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+
+    const {
+      name,
+      email,
+      phone_number,
+      profile_picture,
+      password,
+      verification_docs,
+      // bio
+    } = req.body;
+
+    const agent = await prisma.user.findUnique({ where: { id: userId } });
+    if (!agent) {
+      res.status(404).send({ message: 'Agent not found' });
+      return;
+    }
+    const updatedAgent = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: name || agent.name,
+        email: email || agent.email,
+        phone_number: phone_number || agent.phone_number,
+        profile_picture: profile_picture || agent.profile_picture,
+        // bio: agent.bio
+        password_hash: password
+          ? bcrypt.hashSync(password, 8)
+          : agent.password_hash,
+        verification_docs,
+      },
+    });
+    res.json({
+      message: 'Profile updated successfully',
+      isSignedIn: true,
+      token: generateToken({ id: updatedAgent.id, role: updatedAgent.role }),
+      user: {
+        id: updatedAgent.id,
+        name: updatedAgent.name,
+        email: updatedAgent.email,
+        phone_number: updatedAgent.phone_number,
+        profile_picture: updatedAgent.profile_picture,
+        role: updatedAgent.role,
+        // bio: updatedAgent.bio
+      },
+    });
+  })
+);
+
+// TODO ADD PAGINATION
+//get all properties
 agentRouter.get(
   '/properties',
   isAuth,
@@ -126,7 +271,6 @@ agentRouter.get(
 );
 
 // Get a listing
-
 agentRouter.get(
   '/properties/:id',
   isAuth,
@@ -212,6 +356,7 @@ agentRouter.post(
         agent: { connect: { id: agentId } }, // Link to Agent (User)
       },
     });
+    //TODO NOTIFY FOR APPROVAL
 
     res.status(201).json(newProperty);
   })
@@ -246,6 +391,7 @@ agentRouter.put(
       where: { id: propertyId },
       data: { ...req.body }, // Updates only fields provided in the request body
     });
+    //TODO NOTIFY FOR APPROVAL
 
     res.json(updatedProperty);
   })
