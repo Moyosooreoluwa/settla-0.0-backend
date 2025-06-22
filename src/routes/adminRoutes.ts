@@ -109,7 +109,7 @@ adminRouter.get(
   })
 );
 
-//get an agent
+//get a user
 adminRouter.get(
   '/users/:id',
   isAuth,
@@ -320,4 +320,116 @@ adminRouter.patch(
     });
   })
 );
+
+// all leads
+adminRouter.get(
+  '/leads',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const {
+      page = '1',
+      limit = '10',
+      status = 'all',
+    } = req.query as {
+      page?: string;
+      limit?: string;
+      status?: string;
+    };
+    const adminId = req.user.id;
+
+    const pageNumber = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (pageNumber - 1) * pageSize;
+    const where: any = {};
+
+    if (!adminId) {
+      res.status(400).json({ message: 'Unauthorised' });
+      return;
+    }
+    if (status !== 'all') {
+      where.status = status;
+    }
+
+    const [leads, totalItems] = await prisma.$transaction([
+      prisma.lead.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.lead.count({ where }),
+    ]);
+    res.status(201).json({
+      leads,
+      totalItems,
+      page: pageNumber,
+      pages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+// single lead
+adminRouter.get(
+  '/leads/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const leadId = req.params.id;
+    if (!adminId) {
+      res.status(400).json({ message: 'Unauthorised' });
+      return;
+    }
+    if (!leadId) {
+      res.status(400).json({ message: 'Lead not found' });
+      return;
+    }
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+    res.status(201).json(lead);
+  })
+);
+
+adminRouter.put(
+  '/leads/:id/status',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const leadId = req.params.id;
+    const { status, closure_reason } = req.body as {
+      status: 'new' | 'contacted' | 'in_progress' | 'closed';
+      closure_reason?: string;
+    };
+    if (!adminId) {
+      res.status(400).json({ message: 'Unauthorised' });
+      return;
+    }
+    if (!leadId) {
+      res.status(400).json({ message: 'Lead not found' });
+      return;
+    }
+
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+    });
+    if (!lead) {
+      res.status(400).json({ message: 'Lead not found' });
+      return;
+    }
+    const updatedLead = await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        status,
+        closure_reason,
+      },
+    });
+    // TODO Notify both user and agent about updated
+    res.status(200).json(updatedLead);
+  })
+);
+
 export default adminRouter;

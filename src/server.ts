@@ -8,6 +8,7 @@ import propertyRouter from './routes/propertyRoutes';
 import agentRouter from './routes/agentRoutes';
 import uploadRouter from './routes/uploadRoutes';
 import adminRouter from './routes/adminRoutes';
+import leadRouter from './routes/leadRoutes';
 
 dotenv.config();
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/agents', agentRouter);
 app.use('/api/properties', propertyRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/leads', leadRouter);
 app.use('/api/seed', seedRouter);
 
 // app.use((err, req, res, next) => {
