@@ -21,6 +21,7 @@ model User {
   role             UserRole
   phone_number     String?
   profile_picture  String?
+  //TODO change this to logo and it will only be used for agents.
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
   saved_properties  Property[]     @relation("saved_properties")  

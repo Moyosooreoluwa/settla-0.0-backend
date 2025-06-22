@@ -1,12 +1,17 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAuth } from '../utils/auth';
+import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
 const userRouter = express.Router();
+
+//Google Auth
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID!);
 
 //TODO - FIX CONTROLLERS, VERIFY EMAIL, SOFT DELETE
 
@@ -36,7 +41,6 @@ userRouter.post(
         phone_number,
         password_hash: hashedPassword,
         role: 'buyer',
-        profile_picture: 'https://github.com/shadcn.png',
       },
     });
 
@@ -51,7 +55,6 @@ userRouter.post(
         email: newUser.email,
         phone_number: newUser.phone_number,
         role: newUser.role,
-        profile_picture: newUser.profile_picture,
       },
       token,
     });
@@ -64,37 +67,26 @@ userRouter.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    // --- MODIFICATION START ---
-    // Fetch user and include their saved_properties
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
         saved_properties: {
-          select: { id: true }, // Select only the ID of the saved properties
+          select: { id: true },
         },
       },
     });
-    // --- MODIFICATION END ---
-
     if (!user) {
       res.status(400).send({ message: 'Invalid email or password' });
       return; // Added return to stop execution
     }
-
     const isMatch = await bcrypt.compare(password, user.password_hash);
-
     if (!isMatch) {
       res.status(400).send({ message: 'Invalid email or password' });
       return; // Added return to stop execution
     }
 
     const token = generateToken({ id: user.id, role: user.role });
-
-    // --- MODIFICATION START ---
-    // Extract just the IDs from the included saved_properties
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
-    // --- MODIFICATION END ---
-
     res.status(200).json({
       message: 'Signin successful',
       user: {
@@ -102,13 +94,76 @@ userRouter.post(
         name: user.name,
         email: user.email,
         role: user.role,
-        profile_picture: user.profile_picture,
         phone_number: user.phone_number,
-        saved_properties: savedPropertyIds, // Now includes the array of saved property IDs
+        saved_properties: savedPropertyIds,
       },
       token,
       isSignedIn: true,
     });
+  })
+);
+
+//Google Auth
+userRouter.post(
+  '/google',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { token } = req.body;
+
+    if (!token) {
+      res.status(400).json({ message: 'No token provided' });
+      return;
+    }
+
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+
+      if (!payload || !payload.email) {
+        res.status(400).json({ message: 'Invalid Google token payload' });
+        return;
+      }
+
+      const { email, name, sub, picture } = payload;
+
+      let user = await prisma.user.findUnique({ where: { email } });
+
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email,
+            name: name || 'Google User',
+            password_hash: sub,
+            role: 'buyer',
+          },
+        });
+      }
+
+      const authToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '7d' }
+      );
+
+      res.status(200).json({
+        message: 'Signin successful',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone_number: user.phone_number,
+        },
+        token: authToken,
+        isSignedIn: true,
+      });
+    } catch (error: any) {
+      console.error('Google Auth Error:', error);
+      res.status(500).json({ message: 'Google Authentication failed' });
+    }
   })
 );
 
@@ -119,7 +174,7 @@ userRouter.put(
   asyncHandler(async (req, res) => {
     const userId = req.user?.id;
 
-    const { name, email, phone_number, profile_picture, password } = req.body;
+    const { name, email, phone_number, password } = req.body;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -135,7 +190,6 @@ userRouter.put(
         name: name || user.name,
         email: email || user.email,
         phone_number: phone_number || user.phone_number,
-        profile_picture: profile_picture || user.profile_picture,
         password_hash: password
           ? bcrypt.hashSync(password, 8)
           : user.password_hash,
@@ -151,7 +205,6 @@ userRouter.put(
         name: updatedUser.name,
         email: updatedUser.email,
         phone_number: updatedUser.phone_number,
-        profile_picture: updatedUser.profile_picture,
         role: updatedUser.role,
       },
     });

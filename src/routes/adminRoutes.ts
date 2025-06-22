@@ -41,7 +41,6 @@ adminRouter.post(
         name: user.name,
         email: user.email,
         role: user.role,
-        profile_picture: user.profile_picture,
       },
       token,
       isSignedIn: true,

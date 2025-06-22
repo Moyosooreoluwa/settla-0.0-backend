@@ -14,7 +14,6 @@ const data = {
       email: 'buyer@example.com',
       password_hash: bcrypt.hashSync('123456'),
       role: 'buyer' as UserRole,
-      profile_picture: 'https://github.com/shadcn.png',
       phone_number: '09128734756',
     },
     {
@@ -38,7 +37,6 @@ const data = {
       email: 'admin@example.com',
       password_hash: bcrypt.hashSync('123456'),
       role: 'admin' as UserRole,
-      profile_picture: 'https://github.com/shadcn.png',
       phone_number: '09128734756',
     },
   ],
