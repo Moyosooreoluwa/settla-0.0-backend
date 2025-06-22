@@ -1,16 +1,8 @@
-import express, { NextFunction } from 'express';
-import { Request, Response } from 'express';
+import express from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import {
-  AuthRequest,
-  generateToken,
-  isAdmin,
-  isAgent,
-  isAuth,
-} from '../utils/auth';
-import agentRouter from './agentRoutes';
+import { generateToken, isAdmin, isAuth } from '../utils/auth';
 
 const prisma = new PrismaClient();
 
@@ -120,6 +112,29 @@ adminRouter.get(
 
 //get an agent
 adminRouter.get(
+  '/users/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const userId = req.params.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId, role: 'buyer' },
+      include: {
+        saved_properties: true, // Saved Properties (for buyers)
+      },
+    });
+
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    res.json(user);
+  })
+);
+//get an agent
+adminRouter.get(
   '/agents/:id',
   isAuth,
   isAdmin,
@@ -128,6 +143,9 @@ adminRouter.get(
 
     const agent = await prisma.user.findUnique({
       where: { id: agentId, role: 'agent' },
+      include: {
+        properties: true, // Saved Properties (for buyers)
+      },
     });
 
     if (!agent) {
