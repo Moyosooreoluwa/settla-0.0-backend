@@ -20,7 +20,7 @@ agentRouter.post(
       password,
       phone_number,
       profile_picture,
-      // bio,
+      bio,
       verification_docs,
     } = req.body;
 
@@ -48,7 +48,7 @@ agentRouter.post(
         profile_picture: profile_picture || 'https://github.com/shadcn.png',
         verification_docs: verification_docs || [],
         is_verified: false,
-        // bio
+        bio,
       },
     });
 
@@ -66,7 +66,7 @@ agentRouter.post(
         profile_picture: newUser.profile_picture,
         verification_docs: newUser.verification_docs,
         is_verified: newUser.is_verified,
-        // bio: newUser.bio
+        bio: newUser.bio,
       },
       token,
     });
@@ -116,6 +116,7 @@ agentRouter.post(
         profile_picture: user.profile_picture,
         phone_number: user.phone_number,
         is_verified: user.is_verified,
+        bio: user.bio,
       },
       token,
       isSignedIn: true,
@@ -159,8 +160,16 @@ agentRouter.put(
       profile_picture,
       password,
       verification_docs,
-      // bio
-    } = req.body;
+      bio,
+    } = req.body as {
+      name?: string;
+      email?: string;
+      phone_number: string;
+      profile_picture: string;
+      password?: string;
+      verification_docs?: [];
+      bio?: string;
+    };
 
     const agent = await prisma.user.findUnique({ where: { id: userId } });
     if (!agent) {
@@ -174,7 +183,7 @@ agentRouter.put(
         email: email || agent.email,
         phone_number: phone_number || agent.phone_number,
         profile_picture: profile_picture || agent.profile_picture,
-        // bio: agent.bio
+        bio: bio || agent.bio,
         password_hash: password
           ? bcrypt.hashSync(password, 8)
           : agent.password_hash,
@@ -192,7 +201,7 @@ agentRouter.put(
         phone_number: updatedAgent.phone_number,
         profile_picture: updatedAgent.profile_picture,
         role: updatedAgent.role,
-        // bio: updatedAgent.bio
+        bio: updatedAgent.bio,
       },
     });
   })
