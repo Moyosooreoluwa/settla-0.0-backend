@@ -23,6 +23,7 @@ const data = {
       role: 'agent' as UserRole,
       profile_picture: 'https://github.com/shadcn.png',
       phone_number: '09128734756',
+      bio: "With over a decade of experience in the real estate industry, Agent brings unparalleled expertise and a passion for connecting clients with their dream homes. Specializing in residential properties, Agent excels at navigating the complexities of the market to secure the best deals for buyers and sellers alike. Known for a client-first approach, they prioritize clear communication, personalized service, and a deep understanding of local trends. Whether you're a first-time homebuyer or a season",
     },
     {
       name: 'Agent User2',
@@ -30,7 +31,8 @@ const data = {
       password_hash: bcrypt.hashSync('123456'),
       role: 'agent' as UserRole,
       profile_picture: 'https://github.com/shadcn.png',
-      phone_number: '091287837656',
+      phone_number: '09128837656',
+      bio: 'Agent2 is a dynamic real estate professional with a knack for finding hidden gems in competitive markets. With five years of experience and a background in property investment, Agent2 combines sharp negotiation skills with a keen eye for value, ensuring clients maximize their investments. They pride themselves on building lasting relationships, offering tailored guidance, and staying ahead of market shifts. From cozy starter homes to luxury estates, Agent2 is committed to delivering results with integrity and enthusiasm.',
     },
     {
       name: 'Admin User',

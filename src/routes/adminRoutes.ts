@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAdmin, isAuth } from '../utils/auth';
 
@@ -429,6 +429,151 @@ adminRouter.put(
     });
     // TODO Notify both user and agent about updated
     res.status(200).json(updatedLead);
+  })
+);
+
+adminRouter.get(
+  '/notifications',
+  isAuth,
+  isAdmin, // Assuming only admins can access all notifications
+  asyncHandler(async (req, res) => {
+    const {
+      page = '1',
+      limit = '10',
+      type = 'all',
+      searchTerm = '',
+    } = req.query as {
+      page?: string;
+      limit?: string;
+      type?: string;
+      searchTerm?: string;
+    };
+
+    const pageNumber = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (pageNumber - 1) * pageSize;
+
+    // Building the Prisma `where` filter dynamically
+    const where: any = {};
+
+    if (type !== 'all') {
+      where.type = type; // Filter by type if specified
+    }
+
+    if (searchTerm) {
+      where.OR = [
+        { title: { contains: searchTerm, mode: 'insensitive' } },
+        {
+          receipient: {
+            OR: [
+              { name: { contains: searchTerm, mode: 'insensitive' } },
+              { email: { contains: searchTerm, mode: 'insensitive' } },
+            ],
+          },
+        },
+      ];
+    }
+
+    const [notifications, totalItems] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          receipient: {
+            // Include full recipient info
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              profile_picture: true,
+            },
+          },
+        },
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    res.status(200).json({
+      notifications,
+      totalItems,
+      page: pageNumber,
+      pages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+//Create Notifications
+
+adminRouter.post(
+  '/notifications/create',
+  isAuth,
+  isAdmin, // assuming only admin can send notifications
+  asyncHandler(async (req, res) => {
+    const { title, message, recipients, recipientGroup, type } = req.body;
+    console.log(req.body);
+
+    if (!title || !message || !recipientGroup) {
+      res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    let targetUsers: User[] | User = [];
+
+    // Handle group-based recipients
+    if (recipientGroup && recipientGroup !== 'INDIVIDUAL') {
+      if (recipientGroup === 'ALL_USERS') {
+        targetUsers = await prisma.user.findMany();
+      } else if (recipientGroup === 'ALL_AGENTS') {
+        targetUsers = await prisma.user.findMany({ where: { role: 'agent' } });
+      } else if (recipientGroup === 'ALL_BUYERS') {
+        targetUsers = await prisma.user.findMany({ where: { role: 'buyer' } });
+      } else {
+        res.status(400).json({ message: 'Invalid recipient group' });
+      }
+    } else if (recipients && Array.isArray(recipients)) {
+      // Handle specific user IDs
+      targetUsers = await prisma.user.findMany({
+        where: { id: { in: recipients } },
+      });
+    } else if (recipients && !Array.isArray(recipients)) {
+      const user = await prisma.user.findMany({
+        where: { id: recipients },
+      });
+      targetUsers = user;
+    }
+
+    if (targetUsers.length === 0) {
+      res.status(404).json({ message: 'No target users found' });
+    }
+
+    // Create in-app notifications
+    if (type === 'IN_APP' || type === 'BOTH') {
+      await prisma.$transaction(
+        targetUsers.map((user) =>
+          prisma.notification.create({
+            data: {
+              title,
+              message,
+              type: 'IN_APP',
+              receipientId: user.id,
+            },
+          })
+        )
+      );
+    }
+
+    // TODO: Send Email Notifications (optional):
+    if (type === 'EMAIL' || type === 'BOTH') {
+      // loop over `targetUsers` and send emails using nodemailer or any email service
+      // Example placeholder:
+      for (const user of targetUsers) {
+        // await sendEmail(user.email, title, message);
+      }
+    }
+
+    res.status(201).json({ message: 'Notifications sent successfully' });
   })
 );
 

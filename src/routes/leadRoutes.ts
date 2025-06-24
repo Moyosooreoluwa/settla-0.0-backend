@@ -38,6 +38,9 @@ leadRouter.post(
       res.status(404).json({ message: 'Property not found' });
       return;
     }
+    const agent = await prisma.user.findUnique({
+      where: { id: property.agentId || '', role: 'agent' },
+    });
 
     const newLead = await prisma.lead.create({
       data: {
@@ -50,8 +53,27 @@ leadRouter.post(
         agentId: property.agentId, // optional, can derive from property if needed
       },
     });
+    const newInAppNotification = await prisma.notification.create({
+      data: {
+        type: 'IN_APP',
+        receipientId: property.agentId || '',
+        title: `New Lead Received - ${agent?.name || 'Agent'}`,
+        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      },
+    });
+    // TODO send email notification.
+    const newEmailNotification = await prisma.notification.create({
+      data: {
+        type: 'EMAIL',
+        receipientId: property.agentId || '',
+        title: `New Lead Received - ${agent?.name || 'Agent'}`,
+        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      },
+    });
 
-    res.status(201).json(newLead);
+    res
+      .status(201)
+      .json({ newLead, newInAppNotification, newEmailNotification });
   })
 );
 

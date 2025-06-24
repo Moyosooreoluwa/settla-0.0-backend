@@ -311,4 +311,45 @@ userRouter.get(
   })
 );
 
+// Get Notifications
+userRouter.get(
+  '/my-notifications',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    if (!req.user.id) {
+      res.status(401).send({ message: 'User not authenticated' });
+    }
+    const notifications = await prisma.notification.findMany({
+      where: { receipientId: req.user.id, type: 'IN_APP' },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(notifications);
+  })
+);
+userRouter.put(
+  '/my-notifications/read',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.body;
+
+    const notification = await prisma.notification.findUnique({
+      where: { id, type: 'IN_APP' },
+    });
+
+    if (!notification) {
+      res.status(404).send({ message: 'Notification not found' });
+      return;
+    }
+
+    // Update only if provided
+    const updatedNotification = await prisma.notification.update({
+      where: { id },
+      data: {
+        isRead: true,
+      },
+    });
+    res.json(updatedNotification);
+  })
+);
+
 export default userRouter;

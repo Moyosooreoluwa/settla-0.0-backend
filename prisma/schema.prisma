@@ -32,7 +32,9 @@ model User {
   properties       Property[]     @relation("user_properties") // properties this user owns (agent)
   // New relations for leads
   submittedLeads   Lead[]         @relation("LeadSubmitter")  // leads this user submitted
-  handledLeads     Lead[]         @relation("LeadHandler")   
+  handledLeads     Lead[]         @relation("LeadHandler") 
+
+  notifications Notification[]  
   // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
   // subscriptionId   String?
 }
@@ -101,6 +103,28 @@ model Lead {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
+
+model Notification {
+  id          String   @id @default(uuid())
+  receipient   User     @relation(fields: [receipientId], references: [id])
+  receipientId String
+  title       String   @default("")
+  type        NotificationType @default(IN_APP)
+  message     String   @default("")
+  linkUrl     String?  // For in-app deep links (e.g., property, lead)
+  metadata    Json?    // For extra data (e.g., { propertyId: 'uuid' })
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
+enum NotificationType {
+  IN_APP
+  EMAIL
+}
+
+
 enum LeadStatus {
   new
   contacted
