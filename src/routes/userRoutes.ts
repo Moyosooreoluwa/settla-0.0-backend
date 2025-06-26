@@ -311,6 +311,61 @@ userRouter.get(
   })
 );
 
+// Get Leads
+userRouter.get(
+  '/my-enquiries',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const skip = (page - 1) * limit;
+    if (!req.user.id) {
+      res.status(401).send({ message: 'User not authenticated' });
+    }
+    const [leads, totalItems] = await prisma.$transaction([
+      prisma.lead.findMany({
+        orderBy: { createdAt: 'desc' },
+        where: { userId: req.user.id },
+        include: { property: true, agent: true },
+      }),
+      prisma.lead.count({ where: { userId: req.user.id } }),
+    ]);
+    const pages = Math.ceil(totalItems / limit);
+
+    res.json({ leads, totalItems, page, pages });
+  })
+);
+
+//Get all agents
+userRouter.get(
+  '/agents',
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    // TODO change default limit
+    const limit = parseInt(req.query.limit as string) || 100;
+    const skip = (page - 1) * limit;
+
+    const where = { role: 'agent' as const };
+
+    const [agents, totalItems] = await prisma.$transaction([
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          properties: true, // Include their listed properties
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    const pages = Math.ceil(totalItems / limit);
+
+    res.json({ agents, totalItems, page, pages });
+  })
+);
+
 // Get Notifications
 userRouter.get(
   '/my-notifications',

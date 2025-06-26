@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAdmin, isAuth } from '../utils/auth';
+import { transporter } from '../server';
 
 const prisma = new PrismaClient();
 
@@ -195,14 +196,14 @@ adminRouter.get(
       limit = '10',
       searchTerm = '',
       status = 'all',
-      is_approved = 'all',
+      approval_status = 'all',
       listing_type = 'all',
     } = req.query as {
       page?: string;
       limit?: string;
       searchTerm?: string;
       status?: string;
-      is_approved?: string;
+      approval_status?: string;
       listing_type?: string;
     };
 
@@ -217,8 +218,8 @@ adminRouter.get(
       where.status = status;
     }
 
-    if (is_approved !== 'all') {
-      where.is_approved = is_approved === 'true';
+    if (approval_status !== 'all') {
+      where.approval_status = approval_status;
     }
 
     if (listing_type !== 'all') {
@@ -570,6 +571,12 @@ adminRouter.post(
       // Example placeholder:
       for (const user of targetUsers) {
         // await sendEmail(user.email, title, message);
+        await transporter.sendMail({
+          from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
+          to: user.email,
+          subject: title,
+          text: message,
+        });
       }
     }
 

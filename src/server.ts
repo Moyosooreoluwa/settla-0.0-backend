@@ -9,6 +9,7 @@ import agentRouter from './routes/agentRoutes';
 import uploadRouter from './routes/uploadRoutes';
 import adminRouter from './routes/adminRoutes';
 import leadRouter from './routes/leadRoutes';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 const app = express();
@@ -19,6 +20,16 @@ app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('API Running 🚀');
+});
+
+export const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true for 465, false for 587
+  auth: {
+    user: process.env.SMTP_USER, // your email address
+    pass: process.env.SMTP_PASS, // your app password
+  },
 });
 
 app.use('/api/users', userRouter);

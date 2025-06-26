@@ -18,8 +18,8 @@ const uploadRouter = express.Router();
 
 uploadRouter.post(
   '/image',
-  isAuth,
-  isAgentOrAdmin,
+  // isAuth,
+  // isAgentOrAdmin,
   upload.single('file'),
   asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const file = req.file as Express.Multer.File; // ✅ Type assertion here
@@ -46,8 +46,8 @@ uploadRouter.post(
 
 uploadRouter.post(
   '/pdf',
-  isAuth,
-  isAgentOrAdmin,
+  // isAuth,
+  // isAgentOrAdmin,
   upload.single('file'),
   asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const file = req.file as Express.Multer.File; // ✅ Type assertion here
@@ -68,12 +68,10 @@ uploadRouter.post(
       uploadStream.end(file.buffer);
     });
 
-    res
-      .status(200)
-      .json({
-        secure_url: (result as any).secure_url,
-        file_name: file.originalname,
-      });
+    res.status(200).json({
+      secure_url: (result as any).secure_url,
+      file_name: file.originalname,
+    });
   })
 );
 
