@@ -55,6 +55,20 @@ const data = {
       parking_spaces: '5',
       size_sqm: 795.97,
       price: 1000000000.0,
+      amenities: [
+        'Fitted Kitchen',
+        'Swimming Pool',
+        'Balcony',
+        'Broadband Internet',
+        'Serviced',
+        'CCTV',
+        'Gym',
+        '24/7 Electricity',
+        'Water Supply',
+        'En Suite',
+        'Elevator',
+        'Penthouse',
+      ],
       property_type: 'detached' as PropertyType,
       listing_type: 'sale' as ListingType,
       furnishing: 'furnished' as Furnishing,
@@ -88,6 +102,18 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Parking',
+      //   'Security',
+      //   'Balcony',
+      //   'Broadband Internet',
+      //   'Gym',
+      //   '24/7 Electricity',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
     {
       title: 'Luxury 3 Bedroom Apartment in Victoria Island',
@@ -109,6 +135,18 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Parking',
+      //   'Security',
+      //   'Balcony',
+      //   'Broadband Internet',
+      //   'Gym',
+      //   '24/7 Electricity',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
     {
       title: '5-Bedroom Detached Duplex in Lekki',
@@ -130,6 +168,20 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Serviced',
+      //   'CCTV',
+      //   'Close to top schools',
+      //   '24/7 Security',
+      //   'Gym',
+      //   '24/7 Electricity',
+      //   'Water Supply',
+      //   'En Suite',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
     {
       title: 'Modern 2-Bedroom Flat for Rent in Ikoyi',
@@ -151,6 +203,22 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Fitted Kitchen',
+      //   'Swimming Pool',
+      //   ,
+      //   'Balcony',
+      //   'Broadband Internet',
+      //   ,
+      //   'Close to top schools',
+      //   '24/7 Security',
+      //   ,
+      //   'Water Supply',
+      //   'En Suite',
+      //   ,
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
       tenancy_info:
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aliquam quis quam et consequat. Donec risus velit, vestibulum at dapibus sed, rhoncus sit amet ligula. Cras accumsan ante finibus diam fringilla, nec ultricies ex semper. Cras imperdiet tortor in consequat facilisis. Aliquam eleifend gravida urna eu porttitor. Mauris augue ante, euismod ac ullamcorper et, interdum a neque. Vestibulum augue felis, malesuada ut eleifend a, pharetra vitae massa. Aenean scelerisque id ipsum non faucibus. Integer id metus nec eros sollicitudin rhoncus vel et velit. Proin sagittis eleifend ipsum, nec iaculis dolor laoreet elementum. Donec ante velit, mattis quis turpis ut, maximus vestibulum nibh. Nam volutpat rutrum nibh, vel finibus tortor auctor non.',
 
@@ -178,6 +246,18 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Parking',
+      //   'Security',
+      //   'Close to top schools',
+      //   '24/7 Security',
+      //   'Gym',
+      //   '24/7 Electricity',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
     {
       title: '3-Bedroom Terrace House in GRA',
@@ -199,6 +279,14 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Water Supply',
+      //   'En Suite',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
     {
       title: 'Luxury Shortlet Apartment in Eko Atlantic',
@@ -220,6 +308,16 @@ const data = {
       images: [
         'https://res.cloudinary.com/domz2drcf/image/upload/v1750331906/properties/gl2iag3sja2wbvwyltg5.jpg',
       ],
+      // amenities: [
+      //   'Serviced',
+      //   'CCTV',
+      //   'Water Supply',
+      //   'En Suite',
+      //   'Built-in Wardrobes',
+      //   'Air Conditioning',
+      //   'Elevator',
+      //   'Penthouse',
+      // ],
     },
   ],
 };

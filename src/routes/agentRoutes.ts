@@ -243,6 +243,7 @@ agentRouter.get(
     if (approvalStatus && approvalStatus !== 'all') {
       where.approval_status = approvalStatus as string;
     }
+
     if (listingType && listingType !== 'all') {
       where.listing_type = listingType as string;
     }
@@ -336,6 +337,15 @@ agentRouter.post(
     } = req.body;
 
     const agentId = req.user?.id; // from isAuth middleware
+    const response = await fetch(
+      // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
+      `https://nominatim.openstreetmap.org/search?q=${street},+${city},+${state},+Nigeria&format=json`
+    );
+    const [data] = await response.json();
+    console.log(data);
+
+    const lat = parseFloat(data?.lat);
+    const lon = parseFloat(data?.lon);
 
     const newProperty = await prisma.property.create({
       data: {
@@ -357,6 +367,8 @@ agentRouter.post(
         street,
         city,
         state,
+        lat,
+        lon,
         availability,
         tenancy_info,
         service_charge,
@@ -395,10 +407,26 @@ agentRouter.put(
       throw new Error('Not authorized to edit this property');
     }
 
+    console.log(req.body);
+
+    const { state, city, street } = req.body;
+    const { postal_code, ...rest } = req.body;
+
+    const response = await fetch(
+      // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
+      `https://nominatim.openstreetmap.org/search?q=${street},+${city},+${state},+Nigeria&format=json`
+      // `https://nominatim.openstreetmap.org/search?q=${city},+${state},+Nigeria&format=json`
+      // `https://nominatim.openstreetmap.org/search?postalcode=${postal_code}&country=Nigeria&format=json`
+    );
+    const [data] = await response.json();
+
+    const lat = parseFloat(data?.lat);
+    const lon = parseFloat(data?.lon);
+
     // Update property
     const updatedProperty = await prisma.property.update({
       where: { id: propertyId },
-      data: { ...req.body }, // Updates only fields provided in the request body
+      data: { ...rest, lat, lon }, // Updates only fields provided in the request body
     });
     //TODO NOTIFY FOR APPROVAL
 

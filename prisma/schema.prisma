@@ -64,6 +64,9 @@ model Property {
   street    String
   city      String
   state     String
+  //TODO add postal code
+  lat Float?
+  lon Float?
   parking_spaces  String?
  saved_by     User[]    @relation("saved_properties")
   approval_status    ApprovalStatus @default(pending)
