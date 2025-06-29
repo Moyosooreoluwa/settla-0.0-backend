@@ -19,7 +19,7 @@ agentRouter.post(
       email,
       password,
       phone_number,
-      profile_picture,
+      logo,
       bio,
       verification_docs,
     } = req.body;
@@ -45,7 +45,7 @@ agentRouter.post(
         phone_number,
         password_hash: hashedPassword,
         role: 'agent',
-        profile_picture: profile_picture || 'https://github.com/shadcn.png',
+        logo: logo || 'https://github.com/shadcn.png',
         verification_docs: verification_docs || [],
         is_verified: false,
         bio,
@@ -63,7 +63,7 @@ agentRouter.post(
         email: newUser.email,
         phone_number: newUser.phone_number,
         role: newUser.role,
-        profile_picture: newUser.profile_picture,
+        logo: newUser.logo,
         verification_docs: newUser.verification_docs,
         is_verified: newUser.is_verified,
         bio: newUser.bio,
@@ -113,7 +113,7 @@ agentRouter.post(
         name: user.name,
         email: user.email,
         role: user.role,
-        profile_picture: user.profile_picture,
+        logo: user.logo,
         phone_number: user.phone_number,
         is_verified: user.is_verified,
         bio: user.bio,
@@ -157,7 +157,7 @@ agentRouter.put(
       name,
       email,
       phone_number,
-      profile_picture,
+      logo,
       password,
       verification_docs,
       bio,
@@ -165,7 +165,7 @@ agentRouter.put(
       name?: string;
       email?: string;
       phone_number: string;
-      profile_picture: string;
+      logo: string;
       password?: string;
       verification_docs?: [];
       bio?: string;
@@ -182,7 +182,7 @@ agentRouter.put(
         name: name || agent.name,
         email: email || agent.email,
         phone_number: phone_number || agent.phone_number,
-        profile_picture: profile_picture || agent.profile_picture,
+        logo: logo || agent.logo,
         bio: bio || agent.bio,
         password_hash: password
           ? bcrypt.hashSync(password, 8)
@@ -199,7 +199,7 @@ agentRouter.put(
         name: updatedAgent.name,
         email: updatedAgent.email,
         phone_number: updatedAgent.phone_number,
-        profile_picture: updatedAgent.profile_picture,
+        logo: updatedAgent.logo,
         role: updatedAgent.role,
         bio: updatedAgent.bio,
       },

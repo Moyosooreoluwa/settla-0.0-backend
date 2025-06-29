@@ -20,7 +20,7 @@ model User {
   password_hash    String
   role             UserRole
   phone_number     String?
-  profile_picture  String?
+  logo  String?
   bio String?
   //TODO change this to logo and it will only be used for agents.
   created_at       DateTime       @default(now())
@@ -37,6 +37,8 @@ model User {
   notifications Notification[]  
   // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
   // subscriptionId   String?
+
+  saved_searches SavedSearch[]
 }
 
 
@@ -119,7 +121,38 @@ model Notification {
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  //   category String? // e.g., 'Lead', 'Property', 'SavedSearch'
+  // action String? // e.g., 'created', 'matched', 'replied'
+
 }
+
+model SavedSearch {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+
+  name        String?          // optional label for UI, e.g., "Lagos Apartments"
+  query       Json             // store query parameters (location, min/max price, etc.)
+  sendAlerts  Boolean @default(false)  // whether to notify when new matching listings appear
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // optional: frequency, expiration, etc.
+
+  SearchAlertLog SearchAlertLog[]
+}
+
+model SearchAlertLog {
+  id             String   @id @default(uuid())
+  savedSearch    SavedSearch @relation(fields: [savedSearchId], references: [id])
+  savedSearchId  String
+
+  sentAt         DateTime @default(now())
+  matchedCount   Int
+  deliveryType   NotificationType // IN_APP or EMAIL
+}
+
 
 
 enum NotificationType {

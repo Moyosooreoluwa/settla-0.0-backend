@@ -227,7 +227,7 @@ propertyRouter.get(
       where: { id: id },
       include: {
         agent: {
-          select: { id: true, name: true, email: true, profile_picture: true }, // Optional: get agent info
+          select: { id: true, name: true, email: true, logo: true }, // Optional: get agent info
         },
       },
     });
