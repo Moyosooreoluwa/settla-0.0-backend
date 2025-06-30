@@ -10,6 +10,7 @@ import uploadRouter from './routes/uploadRoutes';
 import adminRouter from './routes/adminRoutes';
 import leadRouter from './routes/leadRoutes';
 import nodemailer from 'nodemailer';
+import './jobs/searchAlerts'; // This starts the cron job
 
 dotenv.config();
 const app = express();

@@ -111,8 +111,8 @@ model Lead {
 
 model Notification {
   id          String   @id @default(uuid())
-  receipient   User     @relation(fields: [receipientId], references: [id])
-  receipientId String
+  recipient   User     @relation(fields: [recipientId], references: [id])
+  recipientId String
   title       String   @default("")
   type        NotificationType @default(IN_APP)
   message     String   @default("")
@@ -137,6 +137,7 @@ model SavedSearch {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  last_checked DateTime @default(now())
 
   // optional: frequency, expiration, etc.
 
@@ -144,13 +145,14 @@ model SavedSearch {
 }
 
 model SearchAlertLog {
-  id             String   @id @default(uuid())
-  savedSearch    SavedSearch @relation(fields: [savedSearchId], references: [id])
-  savedSearchId  String
+   id          String   @id @default(uuid())
+  search      SavedSearch @relation(fields: [searchId], references: [id])
+  searchId    String
+  userId      String   // redundant but useful for indexing/filtering
 
-  sentAt         DateTime @default(now())
-  matchedCount   Int
-  deliveryType   NotificationType // IN_APP or EMAIL
+  result_count Int
+  method       NotificationType // IN_APP or EMAIL
+  notified_at  DateTime @default(now())
 }
 
 

@@ -10,6 +10,10 @@ import {
   isAgentOrAdmin,
   isAuth,
 } from '../utils/auth';
+import {
+  sendEmailNotificationToSingleUser,
+  sendInAppNotificationToSingleUser,
+} from '../utils/utils';
 
 const prisma = new PrismaClient();
 
@@ -53,27 +57,25 @@ leadRouter.post(
         agentId: property.agentId, // optional, can derive from property if needed
       },
     });
-    const newInAppNotification = await prisma.notification.create({
-      data: {
-        type: 'IN_APP',
-        receipientId: property.agentId || '',
-        title: `New Lead Received - ${agent?.name || 'Agent'}`,
-        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
-      },
-    });
-    // TODO send email notification.
-    const newEmailNotification = await prisma.notification.create({
-      data: {
-        type: 'EMAIL',
-        receipientId: property.agentId || '',
-        title: `New Lead Received - ${agent?.name || 'Agent'}`,
-        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
-      },
+    const newInAppNotification = await sendInAppNotificationToSingleUser({
+      recipientId: property.agentId || '',
+      title: `New Lead Received - ${agent?.name || 'Agent'}`,
+      message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
     });
 
-    res
-      .status(201)
-      .json({ newLead, newInAppNotification, newEmailNotification });
+    // TODO send email notification.
+    // const newEmailNotification = await sendEmailNotificationToSingleUser({
+    //   recipientId: property.agentId || '',
+    //   title: `New Lead Received - ${agent?.name || 'Agent'}`,
+    //   message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+    //   email: agent?.email,
+    // });
+
+    res.status(201).json({
+      newLead,
+      newInAppNotification,
+      // , newEmailNotification
+    });
   })
 );
 

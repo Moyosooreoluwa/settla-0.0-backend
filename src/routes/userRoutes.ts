@@ -70,6 +70,7 @@ userRouter.post(
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
+        saved_searches: { select: { id: true } },
         saved_properties: {
           select: { id: true },
         },
@@ -87,6 +88,7 @@ userRouter.post(
 
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
+    const savedSearchesIds = user.saved_searches.map((search) => search.id);
     res.status(200).json({
       message: 'Signin successful',
       user: {
@@ -96,6 +98,7 @@ userRouter.post(
         role: user.role,
         phone_number: user.phone_number,
         saved_properties: savedPropertyIds,
+        saved_searches: savedSearchesIds,
       },
       token,
       isSignedIn: true,
@@ -129,7 +132,13 @@ userRouter.post(
 
       const { email, name, sub, picture } = payload;
 
-      let user = await prisma.user.findUnique({ where: { email } });
+      let user = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          saved_properties: { select: { id: true } },
+          saved_searches: { select: { id: true } },
+        },
+      });
 
       if (!user) {
         user = await prisma.user.create({
@@ -138,6 +147,10 @@ userRouter.post(
             name: name || 'Google User',
             password_hash: sub,
             role: 'buyer',
+          },
+          include: {
+            saved_properties: { select: { id: true } },
+            saved_searches: { select: { id: true } },
           },
         });
       }
@@ -148,6 +161,9 @@ userRouter.post(
         { expiresIn: '7d' }
       );
 
+      const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
+      const savedSearchesIds = user.saved_searches.map((search) => search.id);
+
       res.status(200).json({
         message: 'Signin successful',
         user: {
@@ -156,6 +172,8 @@ userRouter.post(
           email: user.email,
           role: user.role,
           phone_number: user.phone_number,
+          savedSearchesIds,
+          savedPropertyIds,
         },
         token: authToken,
         isSignedIn: true,
@@ -311,6 +329,91 @@ userRouter.get(
   })
 );
 
+// save a search
+userRouter.post(
+  '/save-search',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { query, sendAlerts } = req.body;
+
+    if (!query || typeof query !== 'object') {
+      res
+        .status(400)
+        .json({ message: 'Query is required and must be an object' });
+    }
+
+    const savedSearch = await prisma.savedSearch.create({
+      data: {
+        userId,
+        query,
+        sendAlerts: sendAlerts || false,
+      },
+    });
+
+    res.status(201).json(savedSearch);
+  })
+);
+
+// unsave a search
+userRouter.delete(
+  '/unsave-search/',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { query } = req.body;
+    console.log(query);
+
+    const deleted = await prisma.savedSearch.deleteMany({
+      where: {
+        query: {
+          equals: query, // full deep match
+        },
+      },
+    });
+
+    res.json(deleted);
+  })
+);
+
+// toggle alert
+userRouter.put(
+  '/alert-toggle',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id, sendAlerts } = req.body;
+
+    const search = await prisma.savedSearch.update({
+      where: { id },
+      data: { sendAlerts },
+    });
+
+    res.status(200).json(search);
+  })
+);
+
+// Get saved searches by IDs
+userRouter.get(
+  '/searches/by-ids',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    let ids: string[] = [];
+
+    if (typeof req.query.ids === 'string') {
+      ids = req.query.ids.split(',');
+    } else if (Array.isArray(req.query.ids)) {
+      ids = req.query.ids.flatMap((id) =>
+        typeof id === 'string' ? id.split(',') : []
+      );
+    }
+
+    const searches = await prisma.savedSearch.findMany({
+      where: { id: { in: ids } },
+    });
+
+    res.json(searches);
+  })
+);
+
 // Get Leads
 userRouter.get(
   '/my-enquiries',
@@ -375,7 +478,7 @@ userRouter.get(
       res.status(401).send({ message: 'User not authenticated' });
     }
     const notifications = await prisma.notification.findMany({
-      where: { receipientId: req.user.id, type: 'IN_APP' },
+      where: { recipientId: req.user.id, type: 'IN_APP' },
       orderBy: { createdAt: 'desc' },
     });
     res.json(notifications);

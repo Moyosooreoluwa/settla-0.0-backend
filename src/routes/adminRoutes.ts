@@ -3,7 +3,10 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAdmin, isAuth } from '../utils/auth';
-import { transporter } from '../server';
+import {
+  sendEmailNotificationToSingleUser,
+  sendInAppNotificationToSingleUser,
+} from '../utils/utils';
 
 const prisma = new PrismaClient();
 
@@ -314,6 +317,12 @@ adminRouter.patch(
       },
     });
     //TODO send notification
+    const notificationData = {
+      title: 'Approval Status Update',
+      message: `Property ${property.id}, ${property.title} status updated to ${approval_status}. It is now available for on settla.`,
+      recipientd: property.agentId || '',
+    };
+    await sendInAppNotificationToSingleUser(notificationData);
 
     res.status(200).json({
       message: `Property status updated to ${approval_status}`,
@@ -465,7 +474,7 @@ adminRouter.get(
       where.OR = [
         { title: { contains: searchTerm, mode: 'insensitive' } },
         {
-          receipient: {
+          recipient: {
             OR: [
               { name: { contains: searchTerm, mode: 'insensitive' } },
               { email: { contains: searchTerm, mode: 'insensitive' } },
@@ -482,7 +491,7 @@ adminRouter.get(
         take: pageSize,
         orderBy: { createdAt: 'desc' },
         include: {
-          receipient: {
+          recipient: {
             // Include full recipient info
             select: {
               id: true,
@@ -551,31 +560,23 @@ adminRouter.post(
 
     // Create in-app notifications
     if (type === 'IN_APP' || type === 'BOTH') {
-      await prisma.$transaction(
-        targetUsers.map((user) =>
-          prisma.notification.create({
-            data: {
-              title,
-              message,
-              type: 'IN_APP',
-              receipientId: user.id,
-            },
-          })
-        )
+      targetUsers.map((user) =>
+        sendInAppNotificationToSingleUser({
+          title,
+          message,
+          recipientId: user.id,
+        })
       );
     }
 
     // TODO: Send Email Notifications (optional):
     if (type === 'EMAIL' || type === 'BOTH') {
-      // loop over `targetUsers` and send emails using nodemailer or any email service
-      // Example placeholder:
       for (const user of targetUsers) {
-        // await sendEmail(user.email, title, message);
-        await transporter.sendMail({
-          from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
-          to: user.email,
-          subject: title,
-          text: message,
+        await sendEmailNotificationToSingleUser({
+          email: user.email,
+          title,
+          message,
+          recipientId: user.id,
         });
       }
     }
