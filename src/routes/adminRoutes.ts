@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, User } from '@prisma/client';
+import { Duration, PrismaClient, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAdmin, isAuth } from '../utils/auth';
 import {
@@ -585,4 +585,177 @@ adminRouter.post(
   })
 );
 
+adminRouter.get(
+  '/tiers',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    try {
+      const tiers = await prisma.subscriptionTier.findMany({
+        include: {
+          SubscriptionPlan: true,
+        },
+        orderBy: {
+          rank: 'asc', // optional: order by createdAt or name instead
+        },
+      });
+
+      const formatted = tiers.map((tier) => {
+        const monthlyPlan = tier.SubscriptionPlan.find(
+          (p) => p.duration === 'MONTHLY'
+        );
+
+        const yearlyPlan = tier.SubscriptionPlan.find(
+          (p) => p.duration === 'YEARLY'
+        );
+
+        return {
+          id: tier.id,
+          name: tier.name,
+          features: tier.features,
+          description: tier.description,
+          monthlyPrice: monthlyPlan?.price || 0,
+          yearlyPrice: yearlyPlan?.price || 0,
+        };
+      });
+
+      res.json(formatted);
+    } catch (error) {
+      console.error('Error fetching tiers:', error);
+      res.status(500).json({ message: 'Failed to fetch subscription tiers' });
+    }
+  })
+);
+
+adminRouter.put(
+  '/tiers/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { name, features, monthlyPrice, yearlyPrice, description } =
+      req.body as {
+        name?: 'basic' | 'premium' | 'enterprise';
+        features?: string[];
+        monthlyPrice?: number;
+        yearlyPrice?: number;
+        description: string;
+      };
+
+    // Validate input
+    if (!name || monthlyPrice == null || yearlyPrice == null) {
+      res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const tier = await prisma.subscriptionTier.findUnique({
+      where: { id },
+      include: { SubscriptionPlan: true },
+    });
+
+    if (!tier) {
+      res.status(404).json({ message: 'Subscription tier not found' });
+    }
+
+    // Update tier info
+    await prisma.subscriptionTier.update({
+      where: { id },
+      data: {
+        name,
+        features,
+        description,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Update or create plans
+    for (const duration of [Duration.MONTHLY, Duration.YEARLY]) {
+      const price = duration === Duration.MONTHLY ? monthlyPrice : yearlyPrice;
+
+      const existingPlan = tier?.SubscriptionPlan.find(
+        (plan) => plan.duration === duration
+      );
+
+      if (existingPlan) {
+        // Update existing
+        await prisma.subscriptionPlan.update({
+          where: { id: existingPlan.id },
+          data: { price },
+        });
+      } else {
+        // Create if missing
+        await prisma.subscriptionPlan.create({
+          data: {
+            tierId: tier?.id || '',
+            duration,
+            price: price || 0,
+          },
+        });
+      }
+    }
+
+    res.status(200).json({ message: 'Subscription tier updated successfully' });
+  })
+);
+
+adminRouter.post(
+  '/tiers',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    try {
+      const { name, features, monthlyPrice, yearlyPrice } = req.body;
+
+      if (!name || monthlyPrice == null || yearlyPrice == null) {
+        res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      const newTier = await prisma.subscriptionTier.create({
+        data: {
+          name, // must match enum: 'basic' | 'premium' | 'enterprise'
+          features,
+          SubscriptionPlan: {
+            create: [
+              { duration: 'MONTHLY', price: monthlyPrice },
+              { duration: 'YEARLY', price: yearlyPrice },
+            ],
+          },
+        },
+        include: {
+          SubscriptionPlan: true,
+        },
+      });
+
+      res.status(201).json(newTier);
+    } catch (error) {
+      console.error('Create Tier Error:', error);
+      res.status(500).json({ message: 'Failed to create subscription tier' });
+    }
+  })
+);
+
+adminRouter.delete(
+  '/tiers/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      // First delete associated plans
+      await prisma.subscriptionPlan.deleteMany({
+        where: { tierId: id },
+      });
+
+      // Then delete the tier itself
+      await prisma.subscriptionTier.delete({
+        where: { id },
+      });
+
+      res.json({ message: 'Subscription tier and plans deleted successfully' });
+    } catch (error) {
+      console.error('Delete Tier Error:', error);
+      res.status(500).json({ message: 'Failed to delete subscription tier' });
+    }
+  })
+);
 export default adminRouter;

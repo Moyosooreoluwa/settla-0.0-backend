@@ -35,10 +35,13 @@ model User {
   handledLeads     Lead[]         @relation("LeadHandler") 
 
   notifications Notification[]  
-  // Subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
-  // subscriptionId   String?
+  
 
   saved_searches SavedSearch[]
+
+  Subscriptions Subscription[]
+
+  Payment Payment[]
 }
 
 
@@ -100,7 +103,6 @@ model Lead {
   name        String?    
   // Name of lead (if guest, they can leave name). For now since user needs to be registered, then this is optional
   email       String?    // Email of lead Optional for now
-  // phone_number       String?   // Optional phone
   message     String   // Optional inquiry message
   status      LeadStatus @default(new)
   closure_reason String?
@@ -155,6 +157,69 @@ model SearchAlertLog {
   notified_at  DateTime @default(now())
 }
 
+model SubscriptionTier {
+  id       String   @id @default(uuid())
+  name     SubscriptionTierType
+  features Json?
+  description String?
+  rank Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  subscriptions Subscription[]
+  SubscriptionPlan SubscriptionPlan[]
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  agent         User     @relation(fields: [agentId], references: [id])
+  agentId       String
+  plan          SubscriptionTier @relation(fields: [planId], references: [id])
+  planId        String
+  startDate     DateTime
+  endDate       DateTime
+  isActive      Boolean  @default(true)
+  manuallyGranted Boolean @default(false)
+  createdAt     DateTime @default(now())
+
+  payments Payment[]
+}
+
+model SubscriptionPlan {
+  id        String            @id @default(uuid())
+  tier      SubscriptionTier  @relation(fields: [tierId], references: [id])
+  tierId    String
+  duration  Duration
+  price     Int
+  createdAt DateTime          @default(now())
+}
+
+model Payment {
+  id              String         @id @default(uuid())
+  user            User           @relation(fields: [userId], references: [id])
+  userId          String
+  subscription    Subscription?  @relation(fields: [subscriptionId], references: [id])
+  subscriptionId  String?
+  amount          Int
+  currency        String         @default("NGN")
+  status          PaymentStatus  @default(PENDING)
+  reference       String         @unique
+  provider        PaymentProvider
+  createdAt       DateTime       @default(now())
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  PAYSTACK
+  // STRIPE
+  FLUTTERWAVE
+  MANUAL
+}
 
 
 enum NotificationType {
@@ -170,17 +235,10 @@ enum LeadStatus {
   closed
 }
 
-
-// model Subscription {
-//   id          String     @id @default(uuid())
-//   agent       User       @relation
-//   tier        SubscriptionTier
-//   is_active   Boolean    @default(true)
-//   start_date  DateTime   @default(now())
-//   end_date    DateTime
-//   renewed_at  DateTime?
-//   created_at  DateTime   @default(now())
-// }
+enum Duration {
+  MONTHLY
+  YEARLY
+}
 
 enum UserRole {
   buyer
@@ -215,7 +273,7 @@ enum PropertyStatus {
   unavailable
 }
 
-enum SubscriptionTier {
+enum SubscriptionTierType {
   basic
   premium
   enterprise

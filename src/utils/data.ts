@@ -3,6 +3,7 @@ import {
   ListingType,
   PropertyStatus,
   PropertyType,
+  SubscriptionTierType,
   UserRole,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -314,6 +315,53 @@ const data = {
         'Elevator',
         'Penthouse',
       ],
+    },
+  ],
+  subscriptionTiers: [
+    {
+      name: 'basic' as SubscriptionTierType,
+      price: 0,
+      features: {
+        maxListings: 'Up to 5 Listings',
+        visibility: 'Basic profile visibility',
+        leadAccess: 'Limited lead access',
+        support: 'Email Support within 48 hours',
+        analytics: false,
+        accountManager: false,
+        featuredBadge: false,
+        boosters: false,
+        pow: false,
+      },
+    },
+    {
+      name: 'premium' as SubscriptionTierType,
+      price: 4999, // assume NGN (₦) or use USD depending on your business
+      features: {
+        maxListings: 'Unlimited Listings',
+        visibility: 'Priority profile visibility',
+        leadAccess: 'Full access to leads',
+        support: 'Email Support within 48 hours',
+        analytics: 'Basic analytics',
+        accountManager: false,
+        featuredBadge: false,
+        boosters: false,
+        pow: false,
+      },
+    },
+    {
+      name: 'enterprise' as SubscriptionTierType,
+      price: 19999,
+      features: {
+        maxListings: 'Unlimited Listings',
+        visibility: 'Priority profile visibility',
+        leadAccess: 'Full access to leads',
+        support: '24/7 Support',
+        analytics: 'Advanced analytics',
+        accountManager: 'Dedicated Account manager',
+        featuredBadge: true,
+        boosters: 'Access to boosters',
+        pow: "Access to 'Property of the Week'",
+      },
     },
   ],
 };

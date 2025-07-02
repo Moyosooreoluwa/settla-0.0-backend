@@ -510,4 +510,44 @@ userRouter.put(
   })
 );
 
+userRouter.get(
+  '/tiers',
+  asyncHandler(async (req, res) => {
+    try {
+      const tiers = await prisma.subscriptionTier.findMany({
+        include: {
+          SubscriptionPlan: true,
+        },
+        orderBy: {
+          rank: 'asc', // optional: order by createdAt or name instead
+        },
+      });
+
+      const formatted = tiers.map((tier) => {
+        const monthlyPlan = tier.SubscriptionPlan.find(
+          (p) => p.duration === 'MONTHLY'
+        );
+
+        const yearlyPlan = tier.SubscriptionPlan.find(
+          (p) => p.duration === 'YEARLY'
+        );
+
+        return {
+          id: tier.id,
+          name: tier.name,
+          features: tier.features,
+          description: tier.description,
+          monthlyPrice: monthlyPlan?.price || 0,
+          yearlyPrice: yearlyPlan?.price || 0,
+        };
+      });
+
+      res.json(formatted);
+    } catch (error) {
+      console.error('Error fetching tiers:', error);
+      res.status(500).json({ message: 'Failed to fetch subscription tiers' });
+    }
+  })
+);
+
 export default userRouter;
