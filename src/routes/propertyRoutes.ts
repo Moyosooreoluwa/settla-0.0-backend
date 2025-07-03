@@ -2,12 +2,39 @@ import express from 'express';
 import { Request, Response } from 'express';
 import { Prisma, PrismaClient, UserRole } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
+import { isAuth } from '../utils/auth';
 
 const prisma = new PrismaClient();
 
 const propertyRouter = express.Router();
 
 //TODO FILTER OUT ONLY APPROVED PROPERTIES
+
+// Get saved Properties
+propertyRouter.get(
+  '/saved-properties',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).send({ message: 'User not authenticated' });
+    }
+
+    const userWithSaved = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        saved_properties: {},
+      },
+    });
+
+    if (!userWithSaved) {
+      res.status(404).send({ message: 'User not found' });
+    }
+
+    res.json(userWithSaved?.saved_properties);
+  })
+);
 
 propertyRouter.get(
   '/search',
@@ -239,6 +266,56 @@ propertyRouter.get(
     }
 
     res.status(200).json(property);
+  })
+);
+
+// Save a property
+propertyRouter.post(
+  '/save-property/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    const property = await prisma.property.findUnique({
+      where: { id: id },
+    });
+
+    if (!property) {
+      res.status(404).send({ message: 'Property not found' }); // Changed to .send and added return
+      return;
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        saved_properties: {
+          connect: { id: id },
+        },
+      },
+    });
+
+    res.status(200).json({ message: 'Property added to saved!' });
+  })
+);
+
+// Unsave property
+propertyRouter.delete(
+  '/unsave-property/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        saved_properties: {
+          disconnect: { id },
+        },
+      },
+    });
+
+    res.status(200).json({ message: 'Property removed from saved list.' });
   })
 );
 

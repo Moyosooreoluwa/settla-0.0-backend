@@ -24,6 +24,7 @@ export const checkListingLimit = async (
 
   if (!agent || agent.role !== 'agent') {
     res.status(403).json({ message: 'Not authorized' });
+    return;
   }
 
   const activeSub = await prisma.subscription.findMany({
@@ -49,6 +50,7 @@ export const checkListingLimit = async (
     res.status(403).json({
       message: `You have reached your listing limit (${limit}) for your current plan. To add more listings please upgrade.`,
     });
+    return;
   }
 
   next();
