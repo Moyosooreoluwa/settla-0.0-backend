@@ -85,6 +85,8 @@ model Property {
   deposit Float?
 
   leads Lead[]
+   visibility VisibilityLevel @default(low)
+   is_featured Boolean @default(false)
 }
 
 model Lead {
@@ -159,7 +161,7 @@ model SearchAlertLog {
 
 model SubscriptionTier {
   id       String   @id @default(uuid())
-  name     SubscriptionTierType
+  name     SubscriptionTierType @unique
   features Json?
   description String?
   rank Int @default(0)
@@ -283,5 +285,12 @@ enum ApprovalStatus {
   pending
   rejected
 }
+
+enum VisibilityLevel {
+  low     // For basic
+  medium  // For premium
+  high    // For enterprise
+}
+
 
 

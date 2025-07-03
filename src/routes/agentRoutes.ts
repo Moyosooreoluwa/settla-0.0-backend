@@ -1,9 +1,14 @@
 import express, { NextFunction } from 'express';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, SubscriptionTierType, UserRole } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { AuthRequest, generateToken, isAgent, isAuth } from '../utils/auth';
+import {
+  TierFeatureLimits,
+  TierVisibilityMap,
+} from '../utils/visibilityConfig';
+import { checkListingLimit } from '../middleware/checkListingLimit';
 
 const prisma = new PrismaClient();
 
@@ -67,6 +72,7 @@ agentRouter.post(
         verification_docs: newUser.verification_docs,
         is_verified: newUser.is_verified,
         bio: newUser.bio,
+        subscriptionTier: 'basic',
       },
       token,
     });
@@ -105,6 +111,20 @@ agentRouter.post(
       res.status(400).send({ message: 'Invalid email or password' });
       //   return; // Added return to stop execution
     }
+    const activeSub = await prisma.subscription.findMany({
+      where: {
+        agentId: user.id,
+        isActive: true,
+      },
+      include: { plan: true },
+      orderBy: { endDate: 'desc' },
+    });
+    console.log(activeSub);
+
+    if (!activeSub.length || !activeSub[0].plan) {
+      console.log('No active plan');
+    }
+    const planName = activeSub[0].plan.name;
     const token = generateToken({ id: user.id, role: user.role });
     res.status(200).json({
       message: 'Signin successful',
@@ -117,6 +137,7 @@ agentRouter.post(
         phone_number: user.phone_number,
         is_verified: user.is_verified,
         bio: user.bio,
+        subscriptionTier: planName,
       },
       token,
       isSignedIn: true,
@@ -309,6 +330,7 @@ agentRouter.post(
   '/properties',
   isAuth,
   isAgent,
+  checkListingLimit,
   asyncHandler(async (req, res) => {
     const {
       title,
@@ -337,6 +359,12 @@ agentRouter.post(
     } = req.body;
 
     const agentId = req.user?.id; // from isAuth middleware
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId },
+      include: { Subscriptions: true },
+    });
+    if (!agent) throw new Error('Agent not found');
+
     const response = await fetch(
       // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
       `https://nominatim.openstreetmap.org/search?q=${street},+${city},+${state},+Nigeria&format=json`
@@ -346,6 +374,25 @@ agentRouter.post(
 
     const lat = parseFloat(data?.lat);
     const lon = parseFloat(data?.lon);
+    const activeSub = await prisma.subscription.findMany({
+      where: {
+        agentId,
+        isActive: true,
+      },
+      include: { plan: true },
+      orderBy: { endDate: 'desc' },
+    });
+
+    if (!activeSub.length || !activeSub[0].plan) {
+      res.status(403).json({
+        message: 'You do not have an active subscription plan.',
+      });
+    }
+    const planName = activeSub[0].plan.name;
+
+    const visibility = TierVisibilityMap[planName as SubscriptionTierType];
+
+    // Then use it in the property creation
 
     const newProperty = await prisma.property.create({
       data: {
@@ -374,6 +421,7 @@ agentRouter.post(
         service_charge,
         min_tenancy,
         deposit,
+        visibility,
         agent: { connect: { id: agentId } }, // Link to Agent (User)
       },
     });
@@ -431,6 +479,81 @@ agentRouter.put(
     //TODO NOTIFY FOR APPROVAL
 
     res.json(updatedProperty);
+  })
+);
+
+agentRouter.put(
+  '/featured',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const { properties = [] } = req.body;
+    const agentId = req.user.id;
+    console.log(properties);
+
+    if (!Array.isArray(properties)) {
+      res.status(400).json({ message: 'Invalid propertyIds format.' });
+    }
+
+    // 1. Get the agent and their subscription tier
+    const agent = await prisma.user.findUnique({
+      where: { id: agentId },
+      include: {
+        Subscriptions: true, // or however your schema links subscription tier
+      },
+    });
+    const activeSub = await prisma.subscription.findMany({
+      where: {
+        agentId: agent?.id,
+        isActive: true,
+      },
+      include: { plan: true },
+      orderBy: { endDate: 'desc' },
+    });
+
+    if (!activeSub.length || !activeSub[0].plan) {
+      console.log('No active plan');
+    }
+    const planName = activeSub[0].plan.name;
+
+    const tier: SubscriptionTierType = planName || 'basic';
+    const featureLimit = TierFeatureLimits[tier].featuredSlots;
+
+    if (properties.length > featureLimit) {
+      res.status(400).json({
+        message: `You can only feature up to ${featureLimit} properties on the ${tier} tier.`,
+      });
+    }
+
+    // 2. Find current featured properties for this agent
+    const currentFeatured = await prisma.property.findMany({
+      where: {
+        agentId,
+        is_featured: true,
+      },
+      select: { id: true },
+    });
+
+    const currentIds = currentFeatured.map((p) => p.id);
+
+    const toUnfeature = currentIds.filter((id) => !properties.includes(id));
+    const toFeature = properties;
+
+    // 3. Run transaction
+    await prisma.$transaction([
+      prisma.property.updateMany({
+        where: { id: { in: toUnfeature }, agentId },
+        data: { is_featured: false },
+      }),
+      prisma.property.updateMany({
+        where: { id: { in: toFeature }, agentId },
+        data: { is_featured: true },
+      }),
+    ]);
+
+    res.status(200).json({
+      message: `Featured properties updated. ${toFeature.length} set to featured, ${toUnfeature.length} unfeatured.`,
+    });
   })
 );
 

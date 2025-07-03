@@ -133,7 +133,8 @@ propertyRouter.get(
       filters.push({ amenities: { hasSome: amenityArray } });
     }
 
-    // Radius search using lat/lon
+    //TODO FIX RADIUS SEARCH
+    //  Radius search using lat/lon
     if (lat && lon && Number(radius) > 0) {
       const propertiesInRadius = await prisma.$queryRawUnsafe<any[]>(`
         SELECT id FROM "Property"
@@ -152,13 +153,13 @@ propertyRouter.get(
     };
 
     if (sort === 'price_asc') {
-      orderBy = { price: 'asc' };
+      orderBy = { visibility: 'desc', price: 'asc' };
     } else if (sort === 'price_desc') {
-      orderBy = { price: 'desc' };
+      orderBy = { visibility: 'desc', price: 'desc' };
     } else if (sort === 'oldest') {
-      orderBy = { date_added: 'asc' };
+      orderBy = { visibility: 'desc', date_added: 'asc' };
     } else if (sort === 'newest') {
-      orderBy = { date_added: 'desc' };
+      orderBy = { visibility: 'desc', date_added: 'desc' };
     }
     // Pagination
     const pageNumber = parseInt(page);
