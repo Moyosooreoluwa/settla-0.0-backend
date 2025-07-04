@@ -67,12 +67,16 @@ propertyRouter.get(
 
     console.log(req.query);
     // Handle location_label parsing
+    const coreFilters: any[] = [];
+    const locationFilters: any[] = [];
+
+    // --- 1. Split location filters ---
     if (location_label) {
       const [cityPart, statePart] = location_label
         .split(',')
         .map((part: string) => part.trim());
 
-      filters.push({
+      locationFilters.push({
         OR: [
           { title: { contains: cityPart, mode: 'insensitive' } },
           { description: { contains: cityPart, mode: 'insensitive' } },
@@ -88,10 +92,8 @@ propertyRouter.get(
       });
     }
 
-    // Keyword search in title, city, street, description
-
     if (query) {
-      filters.push({
+      locationFilters.push({
         OR: [
           { title: { contains: query, mode: 'insensitive' } },
           { city: { contains: query, mode: 'insensitive' } },
@@ -101,7 +103,7 @@ propertyRouter.get(
       });
     }
 
-    // Time added filter
+    // --- 2. Core filters ---
     if (time_added) {
       const now = new Date();
       let dateFilter;
@@ -116,77 +118,94 @@ propertyRouter.get(
           dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           break;
       }
-      if (dateFilter) filters.push({ date_added: { gte: dateFilter } });
+      if (dateFilter) coreFilters.push({ date_added: { gte: dateFilter } });
     }
 
-    // Numeric filters
     if (min_beds && min_beds !== 'any')
-      filters.push({ bedrooms: { gte: min_beds } });
+      coreFilters.push({ bedrooms: { gte: min_beds } });
     if (max_beds && max_beds !== 'any')
-      filters.push({ bedrooms: { lte: max_beds } });
+      coreFilters.push({ bedrooms: { lte: max_beds } });
 
     if (min_baths && min_baths !== 'any')
-      filters.push({ bathrooms: { gte: min_baths } });
+      coreFilters.push({ bathrooms: { gte: min_baths } });
     if (max_baths && max_baths !== 'any')
-      filters.push({ bathrooms: { lte: max_baths } });
+      coreFilters.push({ bathrooms: { lte: max_baths } });
 
-    if (min_price) filters.push({ price: { gte: parseFloat(min_price) } });
-    if (max_price) filters.push({ price: { lte: parseFloat(max_price) } });
+    if (min_price) coreFilters.push({ price: { gte: parseFloat(min_price) } });
+    if (max_price) coreFilters.push({ price: { lte: parseFloat(max_price) } });
 
-    // Enum filters (skip if "all")
     if (property_type && property_type !== 'all') {
       const types = Array.isArray(property_type)
         ? property_type
         : [property_type];
-      filters.push({ property_type: { in: types } });
+      coreFilters.push({ property_type: { in: types } });
     }
 
     if (furnishing && furnishing !== 'all') {
       const types = Array.isArray(furnishing) ? furnishing : [furnishing];
-      filters.push({ furnishing: { in: types } });
+      coreFilters.push({ furnishing: { in: types } });
     }
 
     if (listing_type && listing_type !== 'all') {
-      filters.push({ listing_type: { equals: listing_type } });
+      coreFilters.push({ listing_type: { equals: listing_type } });
     }
 
     if (status && status !== 'all') {
-      filters.push({ status: { equals: status } });
+      coreFilters.push({ status: { equals: status } });
     }
 
-    // Amenities filter
     if (amenities) {
-      const amenityArray = Array.isArray(amenities) ? amenities : [amenities];
-      filters.push({ amenities: { hasSome: amenityArray } });
+      const amenityArray = Array.isArray(amenities)
+        ? amenities
+        : amenities.split(',').map((a: string) => a.trim());
+      coreFilters.push({ amenities: { hasSome: amenityArray } });
     }
 
     //TODO FIX RADIUS SEARCH
     //  Radius search using lat/lon
-    if (lat && lon && Number(radius) > 0) {
-      const propertiesInRadius = await prisma.$queryRawUnsafe<any[]>(`
-        SELECT id FROM "Property"
-        WHERE lat IS NOT NULL AND lon IS NOT NULL
-        AND earth_distance(ll_to_earth(${lat}, ${lon}), ll_to_earth(lat, lon)) < ${
-        Number(radius) * 1000
-      }
-      `);
-      const idsInRadius = propertiesInRadius.map((p) => p.id);
-      if (idsInRadius.length > 0) filters.push({ id: { in: idsInRadius } });
-      else res.json({ properties: [], page: 1, pages: 0, totalItems: 0 });
-    }
 
-    let orderBy: Prisma.PropertyOrderByWithRelationInput = {
-      date_added: 'desc',
-    };
+    let where: any = {};
+    if (lat && lon && Number(radius) > 0) {
+      const propertiesInRadius = await prisma.$queryRawUnsafe<any[]>(
+        `
+    SELECT id FROM "Property"
+    WHERE lat IS NOT NULL AND lon IS NOT NULL
+    AND earth_distance(
+      ll_to_earth($1::double precision, $2::double precision),
+      ll_to_earth(lat, lon)
+    ) < $3
+    `,
+        lat,
+        lon,
+        Number(radius) * 1000
+      );
+
+      const idsInRadius = propertiesInRadius.map((p) => p.id);
+      const radiusFilter = { id: { in: idsInRadius } };
+
+      where = {
+        OR: [
+          { AND: [...coreFilters, ...locationFilters] },
+          { AND: [...coreFilters, radiusFilter] },
+        ],
+      };
+    } else {
+      where = {
+        AND: [...coreFilters, ...locationFilters],
+      };
+    }
+    let orderBy: Prisma.PropertyOrderByWithRelationInput[] = [
+      { visibility: 'desc' },
+    ];
 
     if (sort === 'price_asc') {
-      orderBy = { visibility: 'desc', price: 'asc' };
+      orderBy.push({ price: 'asc' });
     } else if (sort === 'price_desc') {
-      orderBy = { visibility: 'desc', price: 'desc' };
+      orderBy.push({ price: 'desc' });
     } else if (sort === 'oldest') {
-      orderBy = { visibility: 'desc', date_added: 'asc' };
-    } else if (sort === 'newest') {
-      orderBy = { visibility: 'desc', date_added: 'desc' };
+      orderBy.push({ date_added: 'asc' });
+    } else {
+      orderBy.push({ date_added: 'desc' });
     }
     // Pagination
     const pageNumber = parseInt(page);
@@ -196,13 +215,13 @@ propertyRouter.get(
 
     const [properties, totalItems] = await prisma.$transaction([
       prisma.property.findMany({
-        where: filters.length > 0 ? { AND: filters } : {},
+        where,
         skip,
         take: pageSize,
         orderBy,
       }),
       prisma.property.count({
-        where: filters.length > 0 ? { AND: filters } : {},
+        where,
       }),
     ]);
     console.log('Final filters:', JSON.stringify(filters, null, 2));
