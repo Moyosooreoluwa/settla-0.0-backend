@@ -7,6 +7,7 @@ import {
   sendEmailNotificationToSingleUser,
   sendInAppNotificationToSingleUser,
 } from '../utils/utils';
+import paystack from '../utils/paystack';
 
 const prisma = new PrismaClient();
 
@@ -148,6 +149,11 @@ adminRouter.get(
       where: { id: agentId, role: 'agent' },
       include: {
         properties: true, // Saved Properties (for buyers)
+        Subscriptions: {
+          include: {
+            plan: true,
+          },
+        },
       },
     });
 
@@ -292,6 +298,192 @@ adminRouter.get(
     }
 
     res.json(property);
+  })
+);
+
+//get all subscriptions
+adminRouter.get(
+  '/subscriptions',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const id = req.user?.id;
+    if (!id) {
+      res.status(400).send({ message: 'Unauthorised' });
+      return;
+    } // Added return to stop execution}
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.limit as string) || 10;
+    const { status } = req.query;
+    const where: any = {};
+
+    if (status !== 'all') {
+      if (status === 'true') {
+        where.isActive = true;
+      } else {
+        where.isActive = false;
+      }
+    }
+
+    const [subscriptions, total] = await Promise.all([
+      prisma.subscription.findMany({
+        where,
+        orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          plan: { include: { SubscriptionPlan: true } },
+          agent: true, // include tier info as well
+        },
+      }),
+      prisma.subscription.count({ where }),
+    ]);
+
+    res.json({
+      subscriptions,
+      page,
+      limit: pageSize,
+      totalItems: total,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  })
+);
+
+//cancel agent subscription
+adminRouter.post(
+  '/subscriptions/:agentId/cancel',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { agentId } = req.params;
+    if (!agentId) {
+      res.status(401).send({ message: 'UNo agent found' });
+    }
+    const subscription = await prisma.subscription.findFirst({
+      where: { isActive: true, agentId: agentId },
+      orderBy: { startDate: 'desc' },
+    });
+    if (!subscription) {
+      res.status(401).send({ message: 'No Active Subscription Found' });
+      return;
+    }
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        isActive: false,
+      },
+    });
+    try {
+      console.log(
+        'Trying to cancel Paystack subscription:',
+        subscription.paystackSubscriptionCode
+      );
+
+      await paystack.post(`/subscription/disable`, {
+        code: `${subscription.paystackSubscriptionCode}`,
+        token: `${subscription.paystackEmailToken}`,
+      });
+      console.log(
+        `Cancelled Paystack subscription: ${subscription.paystackSubscriptionCode}`
+      );
+    } catch (err: any) {
+      console.error(
+        `Failed to cancel Paystack subscription: ${subscription.paystackSubscriptionCode}`,
+        err.response?.data || err.message
+      );
+    }
+    const plan = await prisma.subscriptionTier.findFirst({
+      where: { name: 'basic' },
+    });
+    const planId = plan?.id || '';
+    const now = new Date();
+    const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const newSubscription = await prisma.subscription.create({
+      data: {
+        isActive: true,
+        planId: planId,
+        agentId: agentId.toString(),
+        startDate: now,
+        endDate: endDate,
+        nextPaymentDate: endDate,
+      },
+    });
+    res.status(200).json({
+      message: 'Subscription cancelled, reset to basic.',
+      data: newSubscription,
+    });
+  })
+);
+
+//change agent subscription
+adminRouter.post(
+  '/subscriptions/:agentId/change',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { agentId } = req.params;
+    const { duration, name } = req.body;
+    if (!agentId) {
+      res.status(401).send({ message: 'No agent found' });
+    }
+    const subscription = await prisma.subscription.findFirst({
+      where: { isActive: true, agentId: agentId },
+      orderBy: { startDate: 'desc' },
+    });
+    if (!subscription) {
+      res.status(401).send({ message: 'No Active Subscription Found' });
+      return;
+    }
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        isActive: false,
+      },
+    });
+    try {
+      console.log(
+        'Trying to cancel Paystack subscription:',
+        subscription.paystackSubscriptionCode
+      );
+
+      await paystack.post(`/subscription/disable`, {
+        code: `${subscription.paystackSubscriptionCode}`,
+        token: `${subscription.paystackEmailToken}`,
+      });
+      console.log(
+        `Cancelled Paystack subscription: ${subscription.paystackSubscriptionCode}`
+      );
+    } catch (err: any) {
+      console.error(
+        `Failed to cancel Paystack subscription: ${subscription.paystackSubscriptionCode}`,
+        err.response?.data || err.message
+      );
+    }
+    const plan = await prisma.subscriptionTier.findFirst({
+      where: { name },
+    });
+    const planId = plan?.id || '';
+    const now = new Date();
+    let durationInDays = 30; // Default to monthly
+    if (duration === 'YEARLY') durationInDays = 365;
+
+    const endDate = new Date(
+      now.getTime() + durationInDays * 24 * 60 * 60 * 1000
+    );
+    const newSubscription = await prisma.subscription.create({
+      data: {
+        isActive: true,
+        planId: planId,
+        agentId: agentId.toString(),
+        startDate: now,
+        endDate: endDate,
+        nextPaymentDate: endDate,
+      },
+    });
+    res.status(200).json({
+      message: 'Subscription cancelled, reset to basic.',
+      data: newSubscription,
+    });
   })
 );
 
@@ -585,6 +777,19 @@ adminRouter.post(
   })
 );
 
+// get plans
+adminRouter.get(
+  '/plans',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const plans = await prisma.subscriptionPlan.findMany({
+      include: { tier: true },
+    });
+    res.json(plans);
+  })
+);
+
 adminRouter.get(
   '/tiers',
   isAuth,
@@ -594,6 +799,7 @@ adminRouter.get(
       const tiers = await prisma.subscriptionTier.findMany({
         include: {
           SubscriptionPlan: true,
+          subscriptions: true,
         },
         orderBy: {
           rank: 'asc', // optional: order by createdAt or name instead
@@ -608,6 +814,9 @@ adminRouter.get(
         const yearlyPlan = tier.SubscriptionPlan.find(
           (p) => p.duration === 'YEARLY'
         );
+        const activeSubs = tier.subscriptions.filter(
+          (p) => p.isActive === true
+        );
 
         return {
           id: tier.id,
@@ -616,6 +825,7 @@ adminRouter.get(
           description: tier.description,
           monthlyPrice: monthlyPlan?.price || 0,
           yearlyPrice: yearlyPlan?.price || 0,
+          activeSubs,
         };
       });
 
@@ -758,4 +968,181 @@ adminRouter.delete(
     }
   })
 );
+
+//get all payments
+adminRouter.get(
+  '/payments',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.limit as string) || 10;
+    const { status, provider, purpose } = req.query;
+    const where: any = {};
+
+    if (status !== 'all') {
+      where.status = status;
+    }
+    if (provider !== 'all') {
+      where.provider = provider;
+    }
+    if (purpose !== 'all') {
+      where.purpose = purpose;
+    }
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        // where: { userId },
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          subscription: { include: { plan: true } },
+        },
+      }),
+
+      prisma.payment.count({
+        where,
+      }),
+    ]);
+
+    res.json({
+      payments,
+      page,
+      limit: pageSize,
+      totalItems: total,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  })
+);
+
+//edit payment
+adminRouter.put(
+  '/payments/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const paymentId = req.params.id;
+    const { status } = req.body;
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) {
+      res.status(404);
+      throw new Error('Payment not found');
+    }
+    const updatedPayment = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status,
+      },
+    });
+    res.json(updatedPayment);
+  })
+);
+
+//manual payments
+adminRouter.post(
+  '/manual-payments',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const { planId, reference, amount, userId, purpose, status } = req.body;
+    const plan = await prisma.subscriptionPlan.findFirst({
+      where: { id: planId },
+      include: { tier: true },
+    });
+
+    if (!plan) {
+      res.status(404).json({ message: 'Plan not found' });
+      return;
+    }
+
+    if (purpose === 'SUBSCRIPTION') {
+      const subscription = await prisma.subscription.findFirst({
+        where: { isActive: true, agentId: userId },
+        orderBy: { startDate: 'desc' },
+      });
+      // if (!subscription) {
+      //   res.status(401).send({ message: 'No Active Subscription Found' });
+      //   return;
+      // }
+      if (subscription) {
+        await prisma.subscription.update({
+          where: { id: subscription?.id },
+          data: {
+            isActive: false,
+          },
+        });
+        try {
+          console.log(
+            'Trying to cancel Paystack subscription:',
+            subscription?.paystackSubscriptionCode
+          );
+
+          await paystack.post(`/subscription/disable`, {
+            code: `${subscription?.paystackSubscriptionCode}`,
+            token: `${subscription?.paystackEmailToken}`,
+          });
+          console.log(
+            `Cancelled Paystack subscription: ${subscription?.paystackSubscriptionCode}`
+          );
+        } catch (err: any) {
+          console.error(
+            `Failed to cancel Paystack subscription: ${subscription?.paystackSubscriptionCode}`,
+            err.response?.data || err.message
+          );
+        }
+      }
+
+      const now = new Date();
+      let durationInDays = 30; // Default to monthly
+      if (plan.duration === 'YEARLY') durationInDays = 365;
+
+      const endDate = new Date(
+        now.getTime() + durationInDays * 24 * 60 * 60 * 1000
+      );
+      const newSubscription = await prisma.subscription.create({
+        data: {
+          isActive: true,
+          planId: plan.tierId,
+          agentId: userId.toString(),
+          startDate: now,
+          endDate: endDate,
+          nextPaymentDate: endDate,
+        },
+      });
+      const payment = await prisma.payment.create({
+        data: {
+          userId,
+          reference,
+          amount,
+          provider: 'MANUAL',
+          status,
+          purpose,
+          subscriptionId: newSubscription.id,
+          createdAt: new Date(),
+        },
+      });
+      res.json({
+        message: 'Manual subscription and payment granted successfully',
+      });
+    } else {
+      const payment = await prisma.payment.create({
+        data: {
+          userId,
+          reference,
+          amount,
+          provider: 'MANUAL',
+          status,
+          purpose,
+          createdAt: new Date(),
+        },
+      });
+      res.json({ message: 'Manual payment granted successfully' });
+    }
+  })
+);
+
 export default adminRouter;

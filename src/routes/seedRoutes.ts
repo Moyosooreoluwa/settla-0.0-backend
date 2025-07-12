@@ -97,21 +97,25 @@ seedRouter.post(
           tierId: premiumTier.id,
           duration: 'MONTHLY',
           price: 5000,
+          paystackPlanCode: 'PLN_hmqbgdegudsrnhg',
         },
         {
           tierId: premiumTier.id,
           duration: 'YEARLY',
           price: 55000,
+          paystackPlanCode: 'PLN_i7bn4gajjge4hbm',
         },
         {
           tierId: enterpriseTier.id,
           duration: 'MONTHLY',
           price: 10000,
+          paystackPlanCode: 'PLN_r2d48hghnbx2mvk',
         },
         {
           tierId: enterpriseTier.id,
           duration: 'YEARLY',
           price: 100000,
+          paystackPlanCode: 'PLN_j8fusfihco7fhkq',
         },
       ],
     });

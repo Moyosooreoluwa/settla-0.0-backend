@@ -42,6 +42,8 @@ model User {
   Subscriptions Subscription[]
 
   Payment Payment[]
+
+  PaystackCustomer PaystackCustomer?
 }
 
 
@@ -172,19 +174,34 @@ model SubscriptionTier {
 }
 
 model Subscription {
-  id            String   @id @default(uuid())
-  agent         User     @relation(fields: [agentId], references: [id])
-  agentId       String
-  plan          SubscriptionTier @relation(fields: [planId], references: [id])
-  planId        String
-  startDate     DateTime
-  endDate       DateTime
-  isActive      Boolean  @default(true)
-  manuallyGranted Boolean @default(false)
-  createdAt     DateTime @default(now())
+  id                      String   @id @default(uuid())
+  agent                   User     @relation(fields: [agentId], references: [id])
+  agentId                 String
+  plan                    SubscriptionTier @relation(fields: [planId], references: [id])
+  planId                  String
+  startDate               DateTime
+  endDate                 DateTime
+  isActive                Boolean  @default(true)
+  manuallyGranted         Boolean  @default(false)
 
-  payments Payment[]
+  // 🧾 Recurring Billing Metadata
+  paystackPlanCode         String?     // From Paystack plan object
+  paystackSubscriptionCode String? @unique    // From Paystack subscription object
+  paystackCustomerCode     String?     // From Paystack customer (for future charges)
+  paystackEmailToken       String?     // Used in confirmation URLs (optional)
+  paystackInvoiceToken     String?     // Token for invoice view/download
+  nextPaymentDate          DateTime?   // When next billing is due
+
+  createdAt                DateTime @default(now())
+  payments                 Payment[]
 }
+
+model PaystackCustomer {
+  userId       String   @id
+  customerCode String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+}
+
 
 model SubscriptionPlan {
   id        String            @id @default(uuid())
@@ -193,6 +210,7 @@ model SubscriptionPlan {
   duration  Duration
   price     Int
   createdAt DateTime          @default(now())
+  paystackPlanCode String?
 }
 
 model Payment {
@@ -205,8 +223,10 @@ model Payment {
   currency        String         @default("NGN")
   status          PaymentStatus  @default(PENDING)
   reference       String         @unique
+  purpose         PaymentPurpose @default(SUBSCRIPTION)
   provider        PaymentProvider
   createdAt       DateTime       @default(now())
+  updatedAt       DateTime?
 }
 
 enum PaymentStatus {
@@ -214,6 +234,7 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   REFUNDED
+  COMPLIMENTARY
 }
 
 enum PaymentProvider {
@@ -292,5 +313,9 @@ enum VisibilityLevel {
   high    // For enterprise
 }
 
-
-
+enum PaymentPurpose {
+  SUBSCRIPTION
+  PROPERTY_BOOST
+  FEATURE_UPGRADE
+  CUSTOM
+}

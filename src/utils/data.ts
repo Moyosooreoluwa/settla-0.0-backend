@@ -382,4 +382,21 @@ const data = {
   ],
 };
 
+export function getBillingPeriod(startDateStr: string, endDateStr: string) {
+  const startDate = new Date(startDateStr);
+  const endDate = new Date(endDateStr);
+
+  const diffMonths =
+    (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+    (endDate.getMonth() - startDate.getMonth());
+
+  if (diffMonths === 1) {
+    return 'MONTHLY';
+  } else if (diffMonths === 12) {
+    return 'YEARLY';
+  }
+
+  return null;
+}
+
 export default data;
