@@ -10,32 +10,6 @@ const propertyRouter = express.Router();
 
 //TODO FILTER OUT ONLY APPROVED PROPERTIES
 
-// Get saved Properties
-propertyRouter.get(
-  '/saved-properties',
-  isAuth,
-  asyncHandler(async (req, res) => {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).send({ message: 'User not authenticated' });
-    }
-
-    const userWithSaved = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        saved_properties: {},
-      },
-    });
-
-    if (!userWithSaved) {
-      res.status(404).send({ message: 'User not found' });
-    }
-
-    res.json(userWithSaved?.saved_properties);
-  })
-);
-
 propertyRouter.get(
   '/search',
   asyncHandler(async (req, res) => {
@@ -166,15 +140,29 @@ propertyRouter.get(
 
     let where: any = {};
     if (lat && lon && Number(radius) > 0) {
+      //   const propertiesInRadius = await prisma.$queryRawUnsafe<any[]>(
+      //     `
+      // SELECT id FROM "Property"
+      // WHERE lat IS NOT NULL AND lon IS NOT NULL
+      // AND earth_distance(
+      //   ll_to_earth($1::double precision, $2::double precision),
+      //   ll_to_earth(lat, lon)
+      // ) < $3
+      // `,
+      //     lat,
+      //     lon,
+      //     Number(radius) * 1000
+      //   );
+
       const propertiesInRadius = await prisma.$queryRawUnsafe<any[]>(
         `
-    SELECT id FROM "Property"
-    WHERE lat IS NOT NULL AND lon IS NOT NULL
-    AND earth_distance(
-      ll_to_earth($1::double precision, $2::double precision),
-      ll_to_earth(lat, lon)
-    ) < $3
-    `,
+  SELECT id FROM "Property"
+  WHERE lat IS NOT NULL AND lon IS NOT NULL
+  AND earth_distance(
+    ll_to_earth(CAST($1 AS float8), CAST($2 AS float8)),
+    ll_to_earth(CAST(lat AS float8), CAST(lon AS float8))
+  ) < $3
+  `,
         lat,
         lon,
         Number(radius) * 1000

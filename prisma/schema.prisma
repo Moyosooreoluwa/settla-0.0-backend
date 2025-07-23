@@ -127,6 +127,9 @@ model Notification {
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  //TODO ADD THIS LATER
+  // category        String?  // e.g., 'SUBSCRIPTION', 'PAYMENT'
+  // relatedEntityId String?  // Links to payment or subscription ID
   //   category String? // e.g., 'Lead', 'Property', 'SavedSearch'
   // action String? // e.g., 'created', 'matched', 'replied'
 

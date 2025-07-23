@@ -5,6 +5,7 @@ import asyncHandler from 'express-async-handler';
 import { generateToken, isAuth } from '../utils/auth';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
+import { generateSearchName } from '../utils/data';
 
 const prisma = new PrismaClient();
 
@@ -253,6 +254,37 @@ userRouter.delete(
   })
 );
 
+// Get saved Properties and Seaeches
+userRouter.get(
+  '/saved',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).send({ message: 'User not authenticated' });
+    }
+
+    const userWithSaved = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        saved_properties: {},
+        saved_searches: {},
+      },
+    });
+    const data = {
+      saved_properties: userWithSaved?.saved_properties,
+      saved_searches: userWithSaved?.saved_searches,
+    };
+
+    if (!userWithSaved) {
+      res.status(404).send({ message: 'User not found' });
+    }
+
+    res.json(data);
+  })
+);
+
 // save a search
 userRouter.post(
   '/save-search',
@@ -260,6 +292,7 @@ userRouter.post(
   asyncHandler(async (req, res) => {
     const userId = req.user.id;
     const { query, sendAlerts } = req.body;
+    console.log('query: ', query);
 
     if (!query || typeof query !== 'object') {
       res
@@ -267,11 +300,14 @@ userRouter.post(
         .json({ message: 'Query is required and must be an object' });
     }
 
+    const searchName = generateSearchName(query);
+
     const savedSearch = await prisma.savedSearch.create({
       data: {
         userId,
         query,
         sendAlerts: sendAlerts || false,
+        name: searchName,
       },
     });
 

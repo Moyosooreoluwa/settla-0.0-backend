@@ -399,4 +399,94 @@ export function getBillingPeriod(startDateStr: string, endDateStr: string) {
   return null;
 }
 
+export interface SearchQuery {
+  listing_type?: 'sale' | 'rent' | 'shortlet';
+  property_type?: string; // e.g., 'house', 'flat', 'apartment'
+  min_beds?: number;
+  max_beds?: number;
+  location_label?: string; // e.g., 'London', 'Manchester'
+  // ... other potential query keys you might have, but won't be used for the name
+  // [key: string]: any; // Allow other properties
+}
+
+// --- NEW FUNCTION TO GENERATE SEARCH NAMES ---
+export function generateSearchName(query: SearchQuery | undefined): string {
+  if (!query) {
+    return 'Unnamed Search (No Criteria)';
+  }
+
+  const parts: string[] = [];
+  let bedsPart = '';
+  let propertyTypePart = '';
+  let listingTypePart = '';
+  let locationPart = '';
+
+  const { listing_type, property_type, min_beds, max_beds, location_label } =
+    query;
+
+  // 1. Handle Beds
+  if (min_beds && max_beds) {
+    if (min_beds === max_beds) {
+      bedsPart = `${min_beds}-bed`;
+    } else {
+      bedsPart = `${min_beds} to ${max_beds}-bed`;
+    }
+  } else if (min_beds) {
+    bedsPart = `${min_beds}+ bed`; // Assuming min_beds implies "or more"
+  } else if (max_beds) {
+    bedsPart = `Up to ${max_beds}-bed`;
+  }
+
+  // 2. Handle Property Type
+  if (property_type) {
+    // Basic title-casing for property type (e.g., 'house' -> 'House')
+    propertyTypePart =
+      property_type.charAt(0).toUpperCase() + property_type.slice(1);
+  }
+
+  // 3. Combine Beds and Property Type
+  if (bedsPart && propertyTypePart) {
+    parts.push(`${bedsPart} ${propertyTypePart}`);
+  } else if (bedsPart) {
+    parts.push(bedsPart);
+  } else if (propertyTypePart) {
+    parts.push(propertyTypePart);
+  }
+
+  parts.push('Properties');
+
+  // 4. Handle Listing Type
+  if (listing_type) {
+    switch (listing_type) {
+      case 'sale':
+        listingTypePart = 'for sale';
+        break;
+      case 'rent':
+        listingTypePart = 'to rent';
+        break;
+      case 'shortlet':
+        listingTypePart = 'for shortlets';
+        break;
+      default:
+        // Fallback for unknown listing types, or you can choose to ignore
+        listingTypePart = '';
+    }
+    if (listingTypePart) {
+      parts.push(listingTypePart);
+    }
+  }
+
+  // 5. Handle Location Label
+  if (location_label) {
+    locationPart = `in ${location_label}`;
+    parts.push(locationPart);
+  }
+
+  // Join all parts
+  const generatedName = parts.join(' ').trim();
+
+  // Return a fallback if the generated name is empty (e.g., if query only had irrelevant keys)
+  return generatedName || 'Unnamed Search (No Relevant Criteria)';
+}
+
 export default data;

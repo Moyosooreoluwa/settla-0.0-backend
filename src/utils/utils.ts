@@ -1,5 +1,6 @@
 import { PrismaClient, User } from '@prisma/client';
 import { transporter } from '../server';
+import { sendNotificationToUser } from './socket';
 
 const prisma = new PrismaClient();
 
@@ -14,15 +15,24 @@ export const sendInAppNotificationToSingleUser = async ({
   title,
   message,
   recipientId,
-}: NotificationProps) => {
+  relatedEntityId,
+  category,
+}: NotificationProps & {
+  relatedEntityId?: string;
+  category?: 'SUBSCRIPTION' | 'PAYMENT' | 'ANALYTICS' | 'SYSTEM';
+}) => {
   await prisma.notification.create({
     data: {
       title,
       message,
       type: 'IN_APP',
       recipientId: recipientId || '',
+      //TODO ADD THIS LATER
+      // relatedEntityId:relatedEntityId||"",
+      // category,
     },
   });
+  sendNotificationToUser(recipientId || '', { title, message });
 };
 
 export const sendEmailNotificationToSingleUser = async ({

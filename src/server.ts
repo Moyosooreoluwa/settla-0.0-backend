@@ -10,14 +10,38 @@ import uploadRouter from './routes/uploadRoutes';
 import adminRouter from './routes/adminRoutes';
 import leadRouter from './routes/leadRoutes';
 import nodemailer from 'nodemailer';
+import http from 'http';
+import { Server } from 'socket.io';
 import './jobs/searchAlerts'; // This starts the cron job
 
 dotenv.config();
 const app = express();
+const server = http.createServer(app);
 const prisma = new PrismaClient();
 
 app.use(cors());
 app.use(express.json());
+
+// allow CORS
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:3000'], // TODO frontend origin
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+// Socket.IO events
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+// Make io globally accessible if needed
+export { io };
 
 app.get('/', (req, res) => {
   res.send('API Running 🚀');
