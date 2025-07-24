@@ -92,6 +92,7 @@ seedRouter.post(
           tierId: basicTier.id,
           duration: 'MONTHLY',
           price: 0,
+          paystackPlanCode: '',
         },
         {
           tierId: premiumTier.id,

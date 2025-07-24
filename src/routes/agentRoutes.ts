@@ -26,12 +26,33 @@ agentRouter.post(
     const {
       name,
       email,
-      password,
       phone_number,
       logo,
-      bio,
+      password,
       verification_docs,
-    } = req.body;
+      bio,
+      address,
+      socials,
+    } = req.body as {
+      name: string;
+      email: string;
+      phone_number: string;
+      logo: string;
+      password: string;
+      verification_docs?: [];
+      bio?: string;
+      address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+      };
+      socials: {
+        facebook?: string;
+        instagram?: string;
+        linkedin?: string;
+        twitter?: string;
+      };
+    };
 
     if (!name || !email || !password || !phone_number) {
       res.status(400).send({ message: 'All fields are required' });
@@ -47,6 +68,17 @@ agentRouter.post(
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const response = await fetch(
+      // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
+      `https://nominatim.openstreetmap.org/search?q=${address?.street},+${address?.city},+${address?.state},+Nigeria&format=json`
+    );
+    const [data] = await response.json();
+    console.log(data);
+
+    const lat = parseFloat(data?.lat);
+    const lon = parseFloat(data?.lon);
+    const updatedAddress = { ...address, lat, lon };
+
     const newUser = await prisma.user.create({
       data: {
         name,
@@ -58,6 +90,8 @@ agentRouter.post(
         verification_docs: verification_docs || [],
         is_verified: false,
         bio,
+        socials,
+        address: updatedAddress,
       },
     });
 
@@ -201,6 +235,8 @@ agentRouter.put(
       password,
       verification_docs,
       bio,
+      address,
+      socials,
     } = req.body as {
       name?: string;
       email?: string;
@@ -209,6 +245,17 @@ agentRouter.put(
       password?: string;
       verification_docs?: [];
       bio?: string;
+      address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+      };
+      socials: {
+        facebook?: string;
+        instagram?: string;
+        linkedin?: string;
+        twitter?: string;
+      };
     };
 
     const agent = await prisma.user.findUnique({ where: { id: userId } });
@@ -216,6 +263,16 @@ agentRouter.put(
       res.status(404).send({ message: 'Agent not found' });
       return;
     }
+    const response = await fetch(
+      // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
+      `https://nominatim.openstreetmap.org/search?q=${address?.street},+${address?.city},+${address?.state},+Nigeria&format=json`
+    );
+    const [data] = await response.json();
+    console.log(data);
+
+    const lat = parseFloat(data?.lat);
+    const lon = parseFloat(data?.lon);
+    const updatedAddress = { ...address, lat, lon };
     const updatedAgent = await prisma.user.update({
       where: { id: userId },
       data: {
@@ -228,6 +285,8 @@ agentRouter.put(
           ? bcrypt.hashSync(password, 8)
           : agent.password_hash,
         verification_docs,
+        socials: socials || agent.socials,
+        address: updatedAddress,
       },
     });
     res.json({

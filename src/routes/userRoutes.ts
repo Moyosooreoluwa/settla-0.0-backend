@@ -16,6 +16,40 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID!);
 
 //TODO - FIX CONTROLLERS, VERIFY EMAIL, SOFT DELETE
 
+//Get an agents
+userRouter.get(
+  '/agent/id/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id, role: 'agent' },
+      include: { properties: true },
+    });
+    if (!user) {
+      res.status(404);
+      throw new Error('Agent not found');
+    }
+    const currentSubscription = await prisma.subscription.findFirst({
+      where: { agentId: user.id, isActive: true },
+      include: { plan: true },
+    });
+
+    const agent = {
+      id: user.id,
+      name: user.name,
+      phone_number: user.phone_number,
+      logo: user.logo,
+      email: user.email,
+      bio: user.bio,
+      properties: user.properties,
+      currentSubscription: currentSubscription?.plan.name,
+      socials: user.socials,
+      address: user.address,
+    };
+    res.json(agent);
+  })
+);
+
 userRouter.post(
   '/signup',
   asyncHandler(async (req, res) => {

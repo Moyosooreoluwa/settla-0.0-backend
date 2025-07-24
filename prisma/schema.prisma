@@ -30,9 +30,12 @@ model User {
   is_verified      Boolean        @default(false)
   verification_docs Json?          // Changed to JSON
   properties       Property[]     @relation("user_properties") // properties this user owns (agent)
+  address Json?
+  socials Json?
   // New relations for leads
   submittedLeads   Lead[]         @relation("LeadSubmitter")  // leads this user submitted
   handledLeads     Lead[]         @relation("LeadHandler") 
+
 
   notifications Notification[]  
   
@@ -128,8 +131,8 @@ model Notification {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   //TODO ADD THIS LATER
-  // category        String?  // e.g., 'SUBSCRIPTION', 'PAYMENT'
-  // relatedEntityId String?  // Links to payment or subscription ID
+  category        String?  // e.g., 'SUBSCRIPTION', 'PAYMENT'
+  relatedEntityId String?  // Links to payment or subscription ID
   //   category String? // e.g., 'Lead', 'Property', 'SavedSearch'
   // action String? // e.g., 'created', 'matched', 'replied'
 
