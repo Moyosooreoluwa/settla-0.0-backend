@@ -264,6 +264,16 @@ propertyRouter.get(
         agent: {
           select: { id: true, name: true, email: true, logo: true }, // Optional: get agent info
         },
+        reviews: {
+          select: {
+            id: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+            reviewer: true,
+            reviewerId: true,
+          },
+        },
       },
     });
 
@@ -323,6 +333,86 @@ propertyRouter.delete(
     });
 
     res.status(200).json({ message: 'Property removed from saved list.' });
+  })
+);
+
+//Review a property
+propertyRouter.post(
+  '/:id/reviews',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reviewerId, comment, rating } = req.body;
+    const property = await prisma.property.findUnique({
+      where: { id },
+      include: { reviews: true },
+    });
+
+    if (!property) {
+      res.status(404).send({ message: 'Property not found' });
+      return;
+    }
+
+    if (property.reviews.find((x) => x.reviewerId === req.user.id)) {
+      res.status(400).send({ message: 'You already submitted a review' });
+      return;
+    }
+
+    const review = await prisma.propertyReview.create({
+      data: {
+        reviewerId,
+        rating: Number(rating),
+        comment,
+        propertyId: property.id,
+      },
+      include: { reviewer: true },
+    });
+
+    res.status(201).send({
+      message: 'Review Created',
+      review,
+    });
+  })
+);
+
+//edit a review
+propertyRouter.put(
+  '/reviews/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { comment, rating } = req.body;
+
+    const updatedReview = await prisma.propertyReview.update({
+      where: { id },
+      data: {
+        rating: Number(rating),
+        comment,
+      },
+      include: { reviewer: true },
+    });
+
+    res.status(201).send({
+      message: 'Review Edited',
+      review: updatedReview,
+    });
+  })
+);
+
+//delete a review
+propertyRouter.delete(
+  '/reviews/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    await prisma.propertyReview.delete({
+      where: { id },
+    });
+
+    res.status(201).send({
+      message: 'Review Deleted',
+    });
   })
 );
 

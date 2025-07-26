@@ -23,7 +23,10 @@ userRouter.get(
     const { id } = req.params;
     const user = await prisma.user.findUnique({
       where: { id, role: 'agent' },
-      include: { properties: true },
+      include: {
+        properties: true,
+        reviewsReceived: { include: { reviewer: true } },
+      },
     });
     if (!user) {
       res.status(404);
@@ -35,16 +38,8 @@ userRouter.get(
     });
 
     const agent = {
-      id: user.id,
-      name: user.name,
-      phone_number: user.phone_number,
-      logo: user.logo,
-      email: user.email,
-      bio: user.bio,
-      properties: user.properties,
+      ...user,
       currentSubscription: currentSubscription?.plan.name,
-      socials: user.socials,
-      address: user.address,
     };
     res.json(agent);
   })
@@ -452,6 +447,7 @@ userRouter.get(
         orderBy: { created_at: 'desc' },
         include: {
           properties: true, // Include their listed properties
+          reviewsReceived: { include: { reviewer: true } },
         },
       }),
       prisma.user.count({ where }),
@@ -541,6 +537,86 @@ userRouter.get(
       console.error('Error fetching tiers:', error);
       res.status(500).json({ message: 'Failed to fetch subscription tiers' });
     }
+  })
+);
+
+//Review an agent
+userRouter.post(
+  '/agent/:id/reviews',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reviewerId, comment, rating } = req.body;
+    const agent = await prisma.user.findUnique({
+      where: { id, role: 'agent' },
+      include: { reviewsReceived: true },
+    });
+
+    if (!agent) {
+      res.status(404).send({ message: 'Agent not found' });
+      return;
+    }
+
+    if (agent.reviewsReceived.find((x) => x.reviewerId === req.user.id)) {
+      res.status(400).send({ message: 'You already submitted a review' });
+      return;
+    }
+
+    const review = await prisma.agentReview.create({
+      data: {
+        reviewerId,
+        rating: Number(rating),
+        comment,
+        agentId: agent.id,
+      },
+      include: { reviewer: true },
+    });
+
+    res.status(201).send({
+      message: 'Review Created',
+      review,
+    });
+  })
+);
+
+//edit a review
+userRouter.put(
+  '/agent/reviews/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { comment, rating } = req.body;
+
+    const updatedReview = await prisma.agentReview.update({
+      where: { id },
+      data: {
+        rating: Number(rating),
+        comment,
+      },
+      include: { reviewer: true },
+    });
+
+    res.status(201).send({
+      message: 'Review Edited',
+      review: updatedReview,
+    });
+  })
+);
+
+//delete a review
+userRouter.delete(
+  '/agent/reviews/:id',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    await prisma.agentReview.delete({
+      where: { id },
+    });
+
+    res.status(201).send({
+      message: 'Review Deleted',
+    });
   })
 );
 

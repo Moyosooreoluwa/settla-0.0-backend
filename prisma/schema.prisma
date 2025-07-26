@@ -47,6 +47,11 @@ model User {
   Payment Payment[]
 
   PaystackCustomer PaystackCustomer?
+
+  agentReviews   AgentReview[] @relation("AgentReviewer")
+  reviewsReceived AgentReview[] @relation("AgentReviewed")
+
+  propertyReviews PropertyReview[]
 }
 
 
@@ -92,6 +97,7 @@ model Property {
   leads Lead[]
    visibility VisibilityLevel @default(low)
    is_featured Boolean @default(false)
+   reviews PropertyReview[]
 }
 
 model Lead {
@@ -234,6 +240,31 @@ model Payment {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime?
 }
+
+model AgentReview {
+  id          String   @id @default(uuid())
+  reviewer    User     @relation("AgentReviewer", fields: [reviewerId], references: [id])
+  reviewerId  String
+  agent       User     @relation("AgentReviewed", fields: [agentId], references: [id])
+  agentId     String
+  rating      Int      // 1 to 5 stars
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PropertyReview {
+  id          String   @id @default(uuid())
+  reviewer    User     @relation(fields: [reviewerId], references: [id])
+  reviewerId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  propertyId  String
+  rating      Int      // 1 to 5 stars
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 
 enum PaymentStatus {
   PENDING
