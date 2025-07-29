@@ -68,3 +68,30 @@ export const sendVerificationEmail = async ({
     html: `<p>To verify your email,  <a href="${verifyUrl}">Click here</a>.</p>`,
   });
 };
+
+export const sendResetPasswordEmail = async ({
+  resetUrl,
+  email,
+}: {
+  resetUrl: string;
+  email: string;
+}) => {
+  await transporter.sendMail({
+    from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Verify your email',
+    html: `<p>Click the link to reset your password:</p><a href="${resetUrl}">${resetUrl}</a>`,
+  });
+};
+export const sendPasswordChangedEmail = async ({
+  email,
+}: {
+  email: string;
+}) => {
+  await transporter.sendMail({
+    from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Your Password has been changed',
+    html: `<p>Your Password has been changed</p>`,
+  });
+};

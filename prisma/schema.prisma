@@ -25,6 +25,8 @@ model User {
   bio String?
   emailVerified      Boolean  @default(false)
   verificationToken  String?
+  resetPasswordToken    String?  @unique
+  resetPasswordExpires  DateTime?
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
   saved_properties  Property[]     @relation("saved_properties")  

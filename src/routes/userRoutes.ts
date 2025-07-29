@@ -7,7 +7,12 @@ import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { generateSearchName } from '../utils/data';
 import { nanoid } from 'nanoid';
-import { sendVerificationEmail } from '../utils/utils';
+import {
+  sendPasswordChangedEmail,
+  sendResetPasswordEmail,
+  sendVerificationEmail,
+} from '../utils/utils';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -108,7 +113,7 @@ userRouter.post(
       },
     });
 
-    const verifyUrl = `http://localhost:3000//verify-email?token=${verificationToken}`;
+    const verifyUrl = `http://localhost:3000/verify-email?token=${verificationToken}`;
     // const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
 
     sendVerificationEmail({ email, verifyUrl });
@@ -310,6 +315,78 @@ userRouter.post(
       console.error('Google Auth Error:', error);
       res.status(500).json({ message: 'Google Authentication failed' });
     }
+  })
+);
+
+//forgot passoword
+userRouter.post(
+  '/forgot-password',
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      res.status(200).json({
+        message:
+          'If an account with that email exists, a password reset link has been sent.',
+      });
+      return;
+    }
+
+    // Generate token
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: new Date(Date.now() + 60 * 60 * 1000), // 1 hour expiry
+      },
+    });
+
+    const resetUrl = `http://localhost:3000/reset-password?token=${token}`;
+    await sendResetPasswordEmail({ email: user.email, resetUrl }); // Implement this
+
+    res.json({ message: 'Reset link sent' });
+  })
+);
+
+//reset password
+userRouter.post(
+  '/reset-password',
+  asyncHandler(async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { gte: new Date() },
+      },
+    });
+
+    if (!user) {
+      res.status(400);
+      throw new Error('Invalid or expired token');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_hash: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      },
+    });
+
+    await sendPasswordChangedEmail({ email: user.email });
+
+    res.json({ message: 'Password reset successful' });
   })
 );
 
