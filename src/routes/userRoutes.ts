@@ -6,6 +6,8 @@ import { generateToken, isAuth } from '../utils/auth';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { generateSearchName } from '../utils/data';
+import { nanoid } from 'nanoid';
+import { sendVerificationEmail } from '../utils/utils';
 
 const prisma = new PrismaClient();
 
@@ -16,13 +18,42 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID!);
 
 //TODO - FIX CONTROLLERS, VERIFY EMAIL, SOFT DELETE
 
-//Get an agents
+//Get an agent
 userRouter.get(
   '/agent/id/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
       where: { id, role: 'agent' },
+      include: {
+        properties: true,
+        reviewsReceived: { include: { reviewer: true } },
+      },
+    });
+    if (!user) {
+      res.status(404);
+      throw new Error('Agent not found');
+    }
+    const currentSubscription = await prisma.subscription.findFirst({
+      where: { agentId: user.id, isActive: true },
+      include: { plan: true },
+    });
+
+    const agent = {
+      ...user,
+      currentSubscription: currentSubscription?.plan.name,
+    };
+    res.json(agent);
+  })
+);
+userRouter.get(
+  '/agent/username/:username',
+  asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    console.log(username);
+
+    const user = await prisma.user.findUnique({
+      where: { username },
       include: {
         properties: true,
         reviewsReceived: { include: { reviewer: true } },
@@ -64,6 +95,8 @@ userRouter.post(
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const verificationToken = nanoid(32);
+
     const newUser = await prisma.user.create({
       data: {
         name,
@@ -71,8 +104,14 @@ userRouter.post(
         phone_number,
         password_hash: hashedPassword,
         role: 'buyer',
+        verificationToken,
       },
     });
+
+    const verifyUrl = `http://localhost:3000//verify-email?token=${verificationToken}`;
+    // const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
+
+    sendVerificationEmail({ email, verifyUrl });
 
     const token = generateToken({ id: newUser.id, role: newUser.role });
 
@@ -85,9 +124,59 @@ userRouter.post(
         email: newUser.email,
         phone_number: newUser.phone_number,
         role: newUser.role,
+        emailVerified: newUser.emailVerified,
       },
       token,
     });
+  })
+);
+
+userRouter.get(
+  '/resend-verification',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.user;
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      res
+        .status(400)
+        .send({ message: 'No user Found or Invalid or expired token' });
+    }
+
+    // const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${user?.verificationToken}`;
+    const verifyUrl = `http://localhost:3000//verify-email?token=${user?.verificationToken}`;
+
+    const email = user?.email || '';
+
+    sendVerificationEmail({ email, verifyUrl });
+    res.status(200).json({ message: 'Verification Email Resent' });
+  })
+);
+
+userRouter.post(
+  '/verify-email',
+  asyncHandler(async (req, res) => {
+    const { token } = req.body;
+
+    const user = await prisma.user.findFirst({
+      where: { verificationToken: token },
+    });
+
+    if (!user) {
+      res.status(400).send({ message: 'Invalid or expired token' });
+    }
+
+    await prisma.user.update({
+      where: { id: user?.id },
+      data: {
+        emailVerified: true,
+        verificationToken: null,
+      },
+    });
+    res.status(200).json({ message: 'Email verified successfully' });
   })
 );
 
@@ -115,6 +204,11 @@ userRouter.post(
       res.status(400).send({ message: 'Invalid email or password' });
       return; // Added return to stop execution
     }
+    const verificationToken = nanoid(32);
+
+    const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
+
+    sendVerificationEmail({ email, verifyUrl });
 
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
@@ -129,6 +223,7 @@ userRouter.post(
         phone_number: user.phone_number,
         saved_properties: savedPropertyIds,
         saved_searches: savedSearchesIds,
+        emailVerified: user.emailVerified,
       },
       token,
       isSignedIn: true,
@@ -177,6 +272,8 @@ userRouter.post(
             name: name || 'Google User',
             password_hash: sub,
             role: 'buyer',
+            emailVerified: true,
+            verificationToken: null,
           },
           include: {
             saved_properties: { select: { id: true } },
@@ -204,6 +301,7 @@ userRouter.post(
           phone_number: user.phone_number,
           savedSearchesIds,
           savedPropertyIds,
+          emailVerified: user.emailVerified,
         },
         token: authToken,
         isSignedIn: true,
@@ -428,29 +526,164 @@ userRouter.get(
   })
 );
 
-//Get all agents
+// //Get all agents
+// userRouter.get(
+//   '/agents',
+//   asyncHandler(async (req, res) => {
+
+//     const {search, sort}=req.query as {search:string, sort:string}
+
+//     if(search){
+
+//     }
+//     const page = parseInt(req.query.page as string) || 1;
+//     // TODO change default limit
+//     const limit = parseInt(req.query.limit as string) || 100;
+//     const skip = (page - 1) * limit;
+
+//     const where = { role: 'agent' as const };
+
+//     const [agents, totalItems] = await prisma.$transaction([
+//       prisma.user.findMany({
+//         where,
+//         skip,
+//         take: limit,
+//         orderBy: { created_at: 'desc' },
+//         include: {
+//           properties: true, // Include their listed properties
+//           reviewsReceived: { include: { reviewer: true } },
+//           Subscriptions: { include: { plan: true } },
+//         },
+//       }),
+//       prisma.user.count({ where }),
+//     ]);
+
+//     const pages = Math.ceil(totalItems / limit);
+
+//     res.json({ agents, totalItems, page, pages });
+//   })
+// );
+
+//check availability of username for agents
+
+userRouter.get(
+  '/check-username',
+  asyncHandler(async (req, res) => {
+    const { username } = req.query as { username?: string };
+
+    // 1. Handle missing username:
+    if (!username || typeof username !== 'string' || username.trim() === '') {
+      res.status(400).json({
+        message: 'Username query parameter is required.',
+        isTaken: false, // Or handle as an error if you prefer
+      });
+      return;
+    }
+
+    const agent = await prisma.user.findUnique({
+      where: {
+        role: 'agent',
+        username,
+      },
+      select: {
+        id: true, // Select a minimal field to confirm existence, e.g., id
+      },
+    });
+    if (agent) {
+      // If an agent is found, the username is taken
+      res.status(200).json({ isTaken: true, message: 'Username is taken.' });
+      return;
+    } else {
+      // If no agent is found, the username is available
+      res
+        .status(200)
+        .json({ isTaken: false, message: 'Username is available.' });
+      return;
+    }
+  })
+);
+
 userRouter.get(
   '/agents',
   asyncHandler(async (req, res) => {
+    const { search = '', sort = 'default' } = req.query as {
+      search?: string;
+      sort?: string;
+    };
+
     const page = parseInt(req.query.page as string) || 1;
-    // TODO change default limit
     const limit = parseInt(req.query.limit as string) || 100;
     const skip = (page - 1) * limit;
 
-    const where = { role: 'agent' as const };
+    // If sorting by top rated, need to do manual sorting after fetching all (inefficient on large datasets)
+    if (sort === 'ratingDesc') {
+      const allAgents = await prisma.user.findMany({
+        where: {
+          role: 'agent' as const,
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        include: {
+          properties: true,
+          reviewsReceived: true,
+          Subscriptions: { include: { plan: true } },
+        },
+      });
+
+      const sortedAgents = allAgents
+        .map((agent) => {
+          const totalRatings = agent.reviewsReceived.reduce(
+            (acc, r) => acc + r.rating,
+            0
+          );
+          const averageRating =
+            agent.reviewsReceived.length > 0
+              ? totalRatings / agent.reviewsReceived.length
+              : 0;
+          return { ...agent, averageRating };
+        })
+        .sort((a, b) => b.averageRating - a.averageRating);
+
+      const paginatedAgents = sortedAgents.slice(skip, skip + limit);
+      const totalItems = sortedAgents.length;
+      const pages = Math.ceil(totalItems / limit);
+
+      res.json({ agents: paginatedAgents, totalItems, page, pages });
+    }
+
+    // A-Z sort
+    let orderBy: any = { created_at: 'desc' };
+    if (sort === 'nameAsc') orderBy = { name: 'asc' };
 
     const [agents, totalItems] = await prisma.$transaction([
       prisma.user.findMany({
-        where,
+        where: {
+          role: 'agent' as const,
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
         skip,
         take: limit,
-        orderBy: { created_at: 'desc' },
+        orderBy,
         include: {
-          properties: true, // Include their listed properties
-          reviewsReceived: { include: { reviewer: true } },
+          properties: true,
+          reviewsReceived: true,
+          Subscriptions: { include: { plan: true } },
         },
       }),
-      prisma.user.count({ where }),
+      prisma.user.count({
+        where: {
+          role: 'agent' as const,
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      }),
     ]);
 
     const pages = Math.ceil(totalItems / limit);

@@ -261,9 +261,7 @@ propertyRouter.get(
     const property = await prisma.property.findUnique({
       where: { id: id },
       include: {
-        agent: {
-          select: { id: true, name: true, email: true, logo: true }, // Optional: get agent info
-        },
+        agent: true,
         reviews: {
           select: {
             id: true,

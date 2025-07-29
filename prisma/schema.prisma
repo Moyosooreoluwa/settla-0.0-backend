@@ -19,10 +19,12 @@ model User {
   email            String         @unique
   password_hash    String
   role             UserRole
+  username  String?   @unique
   phone_number     String?
   logo  String?
   bio String?
-  //TODO change this to logo and it will only be used for agents.
+  emailVerified      Boolean  @default(false)
+  verificationToken  String?
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
   saved_properties  Property[]     @relation("saved_properties")  

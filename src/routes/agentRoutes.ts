@@ -30,12 +30,14 @@ agentRouter.post(
       logo,
       password,
       verification_docs,
+      username,
       bio,
       address,
       socials,
     } = req.body as {
       name: string;
       email: string;
+      username: string;
       phone_number: string;
       logo: string;
       password: string;
@@ -84,6 +86,7 @@ agentRouter.post(
         name,
         email,
         phone_number,
+        username,
         password_hash: hashedPassword,
         role: 'agent',
         logo: logo || 'https://github.com/shadcn.png',
@@ -114,6 +117,45 @@ agentRouter.post(
       },
       token,
     });
+  })
+);
+
+//check availability of username
+
+agentRouter.get(
+  '/check-username',
+  asyncHandler(async (req, res) => {
+    const { username } = req.query as { username?: string };
+
+    // 1. Handle missing username:
+    if (!username || typeof username !== 'string' || username.trim() === '') {
+      res.status(400).json({
+        message: 'Username query parameter is required.',
+        isTaken: false, // Or handle as an error if you prefer
+      });
+      return;
+    }
+
+    const agent = await prisma.user.findUnique({
+      where: {
+        role: 'agent',
+        username,
+      },
+      select: {
+        id: true, // Select a minimal field to confirm existence, e.g., id
+      },
+    });
+    if (agent) {
+      // If an agent is found, the username is taken
+      res.status(200).json({ isTaken: true, message: 'Username is taken.' });
+      return;
+    } else {
+      // If no agent is found, the username is available
+      res
+        .status(200)
+        .json({ isTaken: false, message: 'Username is available.' });
+      return;
+    }
   })
 );
 
@@ -230,6 +272,7 @@ agentRouter.put(
     const {
       name,
       email,
+      username,
       phone_number,
       logo,
       password,
@@ -240,6 +283,7 @@ agentRouter.put(
     } = req.body as {
       name?: string;
       email?: string;
+      username?: string;
       phone_number: string;
       logo: string;
       password?: string;
@@ -277,6 +321,7 @@ agentRouter.put(
       where: { id: userId },
       data: {
         name: name || agent.name,
+        username: username || agent.username,
         email: email || agent.email,
         phone_number: phone_number || agent.phone_number,
         logo: logo || agent.logo,

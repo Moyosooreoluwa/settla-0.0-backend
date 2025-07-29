@@ -11,6 +11,11 @@ interface NotificationProps {
   email?: string;
 }
 
+interface VerificationEmailProps {
+  email: string;
+  verifyUrl: string;
+}
+
 export const sendInAppNotificationToSingleUser = async ({
   title,
   message,
@@ -49,5 +54,17 @@ export const sendEmailNotificationToSingleUser = async ({
   });
   await prisma.notification.create({
     data: { title, message, type: 'EMAIL', recipientId: recipientId || '' },
+  });
+};
+
+export const sendVerificationEmail = async ({
+  verifyUrl,
+  email,
+}: VerificationEmailProps) => {
+  await transporter.sendMail({
+    from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Verify your email',
+    html: `<p>To verify your email,  <a href="${verifyUrl}">Click here</a>.</p>`,
   });
 };
