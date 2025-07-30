@@ -27,8 +27,16 @@ model User {
   verificationToken  String?
   resetPasswordToken    String?  @unique
   resetPasswordExpires  DateTime?
+   twoFactorEnabled    Boolean  @default(true)
+  twoFactorCode       String?  // stores generated 2FA code temporarily
+  twoFactorExpiresAt  DateTime? // expiry time for the 2FA code
+  resetPasswordCode String?
+  resetPasswordCodeExpiresAt DateTime?
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
+  provider AuthProvider @default(CREDENTIALS)
+  isDeleted  Boolean  @default(false)
+  deletedAt DateTime? 
   saved_properties  Property[]     @relation("saved_properties")  
   // For Agents
   is_verified      Boolean        @default(false)
@@ -359,4 +367,9 @@ enum PaymentPurpose {
   PROPERTY_BOOST
   FEATURE_UPGRADE
   CUSTOM
+}
+
+enum AuthProvider{
+  GOOGLE
+  CREDENTIALS
 }

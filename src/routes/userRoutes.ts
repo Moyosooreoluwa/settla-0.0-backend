@@ -5,9 +5,10 @@ import asyncHandler from 'express-async-handler';
 import { generateToken, isAuth } from '../utils/auth';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
-import { generateSearchName } from '../utils/data';
+import { generate2FACode, generateSearchName } from '../utils/data';
 import { nanoid } from 'nanoid';
 import {
+  send2FACodeEmail,
   sendPasswordChangedEmail,
   sendResetPasswordEmail,
   sendVerificationEmail,
@@ -127,9 +128,9 @@ userRouter.post(
         id: newUser.id,
         name: newUser.name,
         email: newUser.email,
-        phone_number: newUser.phone_number,
         role: newUser.role,
         emailVerified: newUser.emailVerified,
+        twoFactorEnabled: newUser.twoFactorEnabled,
       },
       token,
     });
@@ -185,7 +186,57 @@ userRouter.post(
   })
 );
 
-// Signin Route
+// // Signin Route
+// userRouter.post(
+//   '/signin',
+//   asyncHandler(async (req, res) => {
+//     const { email, password } = req.body;
+
+//     const user = await prisma.user.findUnique({
+//       where: { email },
+//       include: {
+//         saved_searches: { select: { id: true } },
+//         saved_properties: {
+//           select: { id: true },
+//         },
+//       },
+//     });
+//     if (!user) {
+//       res.status(400).send({ message: 'Invalid email or password' });
+//       return; // Added return to stop execution
+//     }
+//     const isMatch = await bcrypt.compare(password, user.password_hash);
+//     if (!isMatch) {
+//       res.status(400).send({ message: 'Invalid email or password' });
+//       return; // Added return to stop execution
+//     }
+//     const verificationToken = nanoid(32);
+
+//     const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
+
+//     sendVerificationEmail({ email, verifyUrl });
+
+//     const token = generateToken({ id: user.id, role: user.role });
+//     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
+//     const savedSearchesIds = user.saved_searches.map((search) => search.id);
+//     res.status(200).json({
+//       message: 'Signin successful',
+//       user: {
+//         id: user.id,
+//         name: user.name,
+//         email: user.email,
+//         role: user.role,
+//         phone_number: user.phone_number,
+//         saved_properties: savedPropertyIds,
+//         saved_searches: savedSearchesIds,
+//         emailVerified: user.emailVerified,
+//       },
+//       token,
+//       isSignedIn: true,
+//     });
+//   })
+// );
+
 userRouter.post(
   '/signin',
   asyncHandler(async (req, res) => {
@@ -193,28 +244,58 @@ userRouter.post(
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: {
-        saved_searches: { select: { id: true } },
-        saved_properties: {
-          select: { id: true },
-        },
-      },
+      include: { saved_properties: true, saved_searches: true },
     });
     if (!user) {
-      res.status(400).send({ message: 'Invalid email or password' });
-      return; // Added return to stop execution
+      res.status(400).json({ message: 'Invalid email or password' });
+      return;
     }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      res.status(400).send({ message: 'Invalid email or password' });
-      return; // Added return to stop execution
+      res.status(400).json({ message: 'Invalid email or password' });
+      return;
     }
+
+    if (user.isDeleted) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+    }
+
+    if (user.twoFactorEnabled) {
+      const code = generate2FACode(); // e.g., '847392'
+      const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          twoFactorCode: code,
+          twoFactorExpiresAt: expiry,
+        },
+      });
+
+      await send2FACodeEmail({ email: user.email, code });
+
+      res.status(200).json({
+        message: '2FA code sent to email',
+        twoFactorRequired: true,
+        userId: user.id,
+      });
+    }
+
+    // Regular login flow (same as before)
     const verificationToken = nanoid(32);
 
     const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
 
-    sendVerificationEmail({ email, verifyUrl });
-
+    if (!user.emailVerified) {
+      sendVerificationEmail({ email, verifyUrl });
+    }
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
     const savedSearchesIds = user.saved_searches.map((search) => search.id);
@@ -225,9 +306,107 @@ userRouter.post(
         name: user.name,
         email: user.email,
         role: user.role,
-        phone_number: user.phone_number,
         saved_properties: savedPropertyIds,
         saved_searches: savedSearchesIds,
+        emailVerified: user.emailVerified,
+        twoFactorEnabled: user.twoFactorEnabled,
+      },
+      token,
+      isSignedIn: true,
+    });
+  })
+);
+
+userRouter.post(
+  '/resend-2fa',
+  // isAuth, // must be logged in
+  asyncHandler(async (req, res) => {
+    const { userId } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    if (user.provider === 'GOOGLE' || !user.twoFactorEnabled) {
+      res.status(400).json({ message: '2FA not enabled for this user' });
+      return;
+    }
+
+    if (user.twoFactorEnabled) {
+      const code = generate2FACode(); // e.g., '847392'
+      const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          twoFactorCode: code,
+          twoFactorExpiresAt: expiry,
+        },
+      });
+
+      await send2FACodeEmail({ email: user.email, code });
+
+      res.status(200).json({
+        message: '2FA code sent to email',
+        twoFactorRequired: true,
+        userId: user.id,
+      });
+    }
+  })
+);
+
+userRouter.post(
+  '/verify-2fa',
+  asyncHandler(async (req, res) => {
+    const { userId, code } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        saved_properties: true,
+        saved_searches: true,
+      },
+    });
+    if (!user || !user.twoFactorEnabled || !user.twoFactorCode) {
+      res.status(400).json({ message: '2FA not enabled or code missing' });
+      return;
+    }
+
+    if (
+      user.twoFactorCode !== code ||
+      !user.twoFactorExpiresAt ||
+      user.twoFactorExpiresAt < new Date()
+    ) {
+      res.status(400).json({ message: 'Invalid or expired 2FA code' });
+      return;
+    }
+
+    // Clear the code after success
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        twoFactorCode: null,
+        twoFactorExpiresAt: null,
+        emailVerified: true,
+      },
+    });
+
+    const token = generateToken({ id: user.id, role: user.role });
+    const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
+    const savedSearchesIds = user.saved_searches.map((search) => search.id);
+    res.status(200).json({
+      message: '2FA verified',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        saved_properties: savedPropertyIds,
+        saved_searches: savedSearchesIds,
+        twoFactorEnabled: user.twoFactorEnabled,
         emailVerified: user.emailVerified,
       },
       token,
@@ -279,10 +458,26 @@ userRouter.post(
             role: 'buyer',
             emailVerified: true,
             verificationToken: null,
+            provider: 'GOOGLE',
+            twoFactorEnabled: false,
           },
           include: {
             saved_properties: { select: { id: true } },
             saved_searches: { select: { id: true } },
+          },
+        });
+      }
+
+      if (user && user.provider !== 'GOOGLE') {
+        throw new Error('Account exists. Use email and password to sign in.');
+      }
+
+      if (user.isDeleted) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            isDeleted: false,
+            deletedAt: null,
           },
         });
       }
@@ -307,6 +502,7 @@ userRouter.post(
           savedSearchesIds,
           savedPropertyIds,
           emailVerified: user.emailVerified,
+          twoFactorEnabled: user.twoFactorEnabled,
         },
         token: authToken,
         isSignedIn: true,
@@ -328,7 +524,7 @@ userRouter.post(
     if (!user) {
       res.status(200).json({
         message:
-          'If an account with that email exists, a password reset link has been sent.',
+          'If an account with that email exists, a 6 digit code has been sent.',
       });
       return;
     }
@@ -351,8 +547,118 @@ userRouter.post(
     res.json({ message: 'Reset link sent' });
   })
 );
+userRouter.post(
+  '/send-change-password-otp',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      res.status(200).json({
+        message:
+          'If an account with that email exists, a password reset link has been sent.',
+      });
+      return;
+    }
+
+    const code = generate2FACode(); // e.g., '847392'
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordCode: code,
+        resetPasswordCodeExpiresAt: expiry,
+      },
+    });
+
+    await send2FACodeEmail({ email: user.email, code });
+
+    res.status(200).json({
+      message: 'Reset Password code sent to email',
+      userId: user.id,
+    });
+  })
+);
 
 //reset password
+userRouter.post(
+  '/change-password',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { userId, newPassword } = req.body;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      res.status(400);
+      throw new Error('Invalid or expired token');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_hash: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      },
+    });
+
+    await sendPasswordChangedEmail({ email: user.email });
+
+    res.json({ message: 'Password reset successful' });
+  })
+);
+
+userRouter.post(
+  '/verify-change-password-otp',
+  asyncHandler(async (req, res) => {
+    const { userId, code } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        saved_properties: true,
+        saved_searches: true,
+      },
+    });
+    if (!user || !user.resetPasswordCode) {
+      res.status(400).json({ message: 'Code missing' });
+      return;
+    }
+
+    if (
+      user.resetPasswordCode !== code ||
+      !user.resetPasswordCodeExpiresAt ||
+      user.resetPasswordCodeExpiresAt < new Date()
+    ) {
+      res.status(400).json({ message: 'Invalid or expired code' });
+      return;
+    }
+
+    // Clear the code after success
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordCode: null,
+        resetPasswordCodeExpiresAt: null,
+        emailVerified: true,
+      },
+    });
+
+    res.status(200).json({
+      message: '2FA verified',
+    });
+  })
+);
 userRouter.post(
   '/reset-password',
   asyncHandler(async (req, res) => {
@@ -397,7 +703,7 @@ userRouter.put(
   asyncHandler(async (req, res) => {
     const userId = req.user?.id;
 
-    const { name, email, phone_number, password } = req.body;
+    const { name, email } = req.body;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -412,10 +718,6 @@ userRouter.put(
       data: {
         name: name || user.name,
         email: email || user.email,
-        phone_number: phone_number || user.phone_number,
-        password_hash: password
-          ? bcrypt.hashSync(password, 8)
-          : user.password_hash,
       },
     });
 
@@ -427,18 +729,61 @@ userRouter.put(
         id: updatedUser.id,
         name: updatedUser.name,
         email: updatedUser.email,
-        phone_number: updatedUser.phone_number,
         role: updatedUser.role,
+        twoFactorEnabled: user.twoFactorEnabled,
       },
     });
   })
 );
 
-//Delete User
-userRouter.delete(
-  '/me',
+userRouter.patch(
+  '/toggle-2fa',
   isAuth,
   asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    const newValue = !user.twoFactorEnabled;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: newValue },
+    });
+
+    res.json({ message: `2FA ${newValue ? 'enabled' : 'disabled'}` });
+  })
+);
+
+//Delete User
+userRouter.delete(
+  '/deactivate-account',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    //HARD DELETE
+    // const userId = req.user?.id;
+    // if (!userId) {
+    //   res.status(401).send({ message: 'Not authorized' }); // Changed to .send and added return
+    //   return;
+    // }
+
+    // const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    // if (!user) {
+    //   res.status(404).send({ message: 'User not found' }); // Changed to .send and added return
+    //   return;
+    // }
+
+    // await prisma.user.delete({ where: { id: userId } });
+
+    // res.status(200).json({ message: 'Your account has been deleted.' });
+
+    // SOFT DELETE
     const userId = req.user?.id;
     if (!userId) {
       res.status(401).send({ message: 'Not authorized' }); // Changed to .send and added return
@@ -451,10 +796,27 @@ userRouter.delete(
       res.status(404).send({ message: 'User not found' }); // Changed to .send and added return
       return;
     }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    res.json({ message: 'User restored', user });
+  })
+);
 
-    await prisma.user.delete({ where: { id: userId } });
+// Restore user
+userRouter.patch(
+  '/users/:id/restore',
+  isAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-    res.status(200).json({ message: 'Your account has been deleted.' });
+    const user = await prisma.user.update({
+      where: { id },
+      data: { isDeleted: false },
+    });
+
+    res.json({ message: 'User restored', user });
   })
 );
 

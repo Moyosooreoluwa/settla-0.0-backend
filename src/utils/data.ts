@@ -489,4 +489,8 @@ export function generateSearchName(query: SearchQuery | undefined): string {
   return generatedName || 'Unnamed Search (No Relevant Criteria)';
 }
 
+export const generate2FACode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
 export default data;

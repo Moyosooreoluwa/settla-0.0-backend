@@ -95,3 +95,18 @@ export const sendPasswordChangedEmail = async ({
     html: `<p>Your Password has been changed</p>`,
   });
 };
+
+export const send2FACodeEmail = async ({
+  email,
+  code,
+}: {
+  email: string;
+  code: string;
+}) => {
+  await transporter.sendMail({
+    from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Your 2FA Code',
+    text: `Your login verification code is: ${code}`,
+  });
+};
