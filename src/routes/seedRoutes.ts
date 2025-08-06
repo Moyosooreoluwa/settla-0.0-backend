@@ -14,11 +14,14 @@ seedRouter.post(
     await prisma.savedSearch.deleteMany({});
     await prisma.notification.deleteMany({});
     await prisma.lead.deleteMany({});
+    await prisma.agentReview.deleteMany({});
+    await prisma.propertyReview.deleteMany({});
     await prisma.property.deleteMany({});
     await prisma.subscription.deleteMany({});
     await prisma.subscriptionPlan.deleteMany({});
     await prisma.subscriptionTier.deleteMany({});
     await prisma.payment.deleteMany({});
+    await prisma.paystackCustomer.deleteMany({});
     await prisma.user.deleteMany({});
 
     // Step 1: Seed users and properties

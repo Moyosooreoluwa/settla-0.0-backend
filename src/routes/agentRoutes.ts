@@ -12,7 +12,16 @@ import { checkListingLimit } from '../middleware/checkListingLimit';
 import * as crypto from 'crypto';
 
 import paystack from '../utils/paystack';
-import { getBillingPeriod } from '../utils/data';
+import {
+  calculateNewEndDate,
+  generate2FACode,
+  getBillingPeriod,
+} from '../utils/data';
+import {
+  send2FACodeEmail,
+  sendEmailNotificationToSingleUser,
+} from '../utils/utils';
+import { addDays } from 'date-fns';
 
 const prisma = new PrismaClient();
 
@@ -23,40 +32,17 @@ const agentRouter = express.Router();
 agentRouter.post(
   '/signup',
   asyncHandler(async (req, res) => {
-    const {
-      name,
-      email,
-      phone_number,
-      logo,
-      password,
-      verification_docs,
-      username,
-      bio,
-      address,
-      socials,
-    } = req.body as {
-      name: string;
-      email: string;
-      username: string;
-      phone_number: string;
-      logo: string;
-      password: string;
-      verification_docs?: [];
-      bio?: string;
-      address?: {
-        street?: string;
-        city?: string;
-        state?: string;
+    const { name, email, phone_number, password, verification_docs, username } =
+      req.body as {
+        name: string;
+        email: string;
+        username: string;
+        phone_number: string;
+        password: string;
+        verification_docs?: [];
       };
-      socials: {
-        facebook?: string;
-        instagram?: string;
-        linkedin?: string;
-        twitter?: string;
-      };
-    };
 
-    if (!name || !email || !password || !phone_number) {
+    if (!name || !email || !password || !phone_number || !username) {
       res.status(400).send({ message: 'All fields are required' });
       return; // Added return
     }
@@ -70,16 +56,16 @@ agentRouter.post(
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const response = await fetch(
-      // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
-      `https://nominatim.openstreetmap.org/search?q=${address?.street},+${address?.city},+${address?.state},+Nigeria&format=json`
-    );
-    const [data] = await response.json();
-    console.log(data);
+    // const response = await fetch(
+    //   // `https://nominatim.openstreetmap.org/search?city=${req.body.city}&state=${req.body.state}&country=Nigeria&format=json`
+    //   `https://nominatim.openstreetmap.org/search?q=${address?.street},+${address?.city},+${address?.state},+Nigeria&format=json`
+    // );
+    // const [data] = await response.json();
+    // console.log(data);
 
-    const lat = parseFloat(data?.lat);
-    const lon = parseFloat(data?.lon);
-    const updatedAddress = { ...address, lat, lon };
+    // const lat = parseFloat(data?.lat);
+    // const lon = parseFloat(data?.lon);
+    // const updatedAddress = { ...address, lat, lon };
 
     const newUser = await prisma.user.create({
       data: {
@@ -89,12 +75,10 @@ agentRouter.post(
         username,
         password_hash: hashedPassword,
         role: 'agent',
-        logo: logo || 'https://github.com/shadcn.png',
+        logo: 'https://github.com/shadcn.png',
         verification_docs: verification_docs || [],
         is_verified: false,
-        bio,
-        socials,
-        address: updatedAddress,
+        twoFactorEnabled: true,
       },
     });
 
@@ -110,10 +94,10 @@ agentRouter.post(
         phone_number: newUser.phone_number,
         role: newUser.role,
         logo: newUser.logo,
-        verification_docs: newUser.verification_docs,
         is_verified: newUser.is_verified,
         bio: newUser.bio,
         subscriptionTier: 'basic',
+        twoFactorEnabled: newUser.twoFactorEnabled,
       },
       token,
     });
@@ -125,7 +109,10 @@ agentRouter.post(
 agentRouter.get(
   '/check-username',
   asyncHandler(async (req, res) => {
-    const { username } = req.query as { username?: string };
+    const { username, userId } = req.query as {
+      username?: string;
+      userId: string;
+    };
 
     // 1. Handle missing username:
     if (!username || typeof username !== 'string' || username.trim() === '') {
@@ -145,7 +132,7 @@ agentRouter.get(
         id: true, // Select a minimal field to confirm existence, e.g., id
       },
     });
-    if (agent) {
+    if (agent && agent.id !== userId) {
       // If an agent is found, the username is taken
       res.status(200).json({ isTaken: true, message: 'Username is taken.' });
       return;
@@ -191,6 +178,64 @@ agentRouter.post(
       res.status(400).send({ message: 'Invalid email or password' });
       //   return; // Added return to stop execution
     }
+
+    const code = generate2FACode(); // e.g., '847392'
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        twoFactorCode: code,
+        twoFactorExpiresAt: expiry,
+      },
+    });
+
+    await send2FACodeEmail({ email: user.email, code });
+
+    res.status(200).json({
+      message: '2FA code sent to email',
+      twoFactorRequired: true,
+      userId: user.id,
+    });
+  })
+);
+
+agentRouter.post(
+  '/verify-2fa',
+  asyncHandler(async (req, res) => {
+    const { userId, code } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        saved_properties: true,
+        saved_searches: true,
+      },
+    });
+    if (!user || !user.twoFactorEnabled || !user.twoFactorCode) {
+      res.status(400).json({ message: '2FA not enabled or code missing' });
+      return;
+    }
+
+    if (
+      user.twoFactorCode !== code ||
+      !user.twoFactorExpiresAt ||
+      user.twoFactorExpiresAt < new Date()
+    ) {
+      res.status(400).json({ message: 'Invalid or expired 2FA code' });
+      return;
+    }
+
+    // Clear the code after success
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        twoFactorCode: null,
+        twoFactorExpiresAt: null,
+        emailVerified: true,
+      },
+    });
+
     const activeSub = await prisma.subscription.findFirst({
       where: {
         agentId: user.id,
@@ -371,8 +416,8 @@ agentRouter.get(
       listingType,
       status,
       searchTerm,
-      page = '1', // Default to page 1
-      limit = '10', // Default to 10 items per page
+      page = '1',
+      limit = '10',
     } = req.query;
 
     const pageSize = parseInt(limit as string, 10);
@@ -380,26 +425,39 @@ agentRouter.get(
     const skip = (currentPage - 1) * pageSize;
 
     const where: any = {
-      // Use 'any' or define a more specific PrismaWhereInput type
       agentId: agentId,
     };
 
-    if (approvalStatus && approvalStatus !== 'all') {
-      where.approval_status = approvalStatus as string;
+    // --- UPDATED: Handle comma-separated approvalStatus values ---
+    if (approvalStatus) {
+      const approvalStatusArray = (approvalStatus as string).split(',');
+      if (!approvalStatusArray.includes('all')) {
+        where.approval_status = {
+          in: approvalStatusArray,
+        };
+      }
     }
 
+    // --- Original Logic: Handle single listingType value ---
     if (listingType && listingType !== 'all') {
       where.listing_type = listingType as string;
     }
-    if (status && status !== 'all') {
-      where.status = status as string;
+
+    // --- UPDATED: Handle comma-separated status values ---
+    if (status) {
+      const statusArray = (status as string).split(',');
+      if (!statusArray.includes('all')) {
+        where.status = {
+          in: statusArray,
+        };
+      }
     }
 
+    // --- Original Logic: Handle searchTerm ---
     if (searchTerm) {
-      // Prisma's OR operator for searching across multiple fields
       where.OR = [
-        { title: { contains: searchTerm as string, mode: 'insensitive' } }, // Case-insensitive search for title
-        { id: { contains: searchTerm as string, mode: 'insensitive' } }, // Search by ID (if it's a string)
+        { title: { contains: searchTerm as string, mode: 'insensitive' } },
+        { id: { contains: searchTerm as string, mode: 'insensitive' } },
       ];
     }
 
@@ -411,7 +469,7 @@ agentRouter.get(
         skip: skip,
         take: pageSize,
       }),
-      prisma.property.count({ where }), // Get total count for pagination
+      prisma.property.count({ where }),
     ]);
 
     res.json({
@@ -695,6 +753,9 @@ agentRouter.get(
     const pageSize = parseInt(req.query.limit as string) || 10;
     const allSubscriptions = await prisma.subscription.findMany({
       where: { agentId },
+      include: {
+        plan: true,
+      },
     });
     const activeSub = allSubscriptions.find((sub) => sub.isActive);
 
@@ -738,6 +799,7 @@ agentRouter.post(
     }
     const subscription = await prisma.subscription.findFirst({
       where: { isActive: true, agentId },
+      include: { plan: { include: { SubscriptionPlan: true } } },
       orderBy: { startDate: 'desc' },
     });
     if (!subscription) {
@@ -776,15 +838,15 @@ agentRouter.post(
     });
     const planId = plan?.id || '';
     const now = new Date();
-    const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    // const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const newSubscription = await prisma.subscription.create({
       data: {
         isActive: true,
         planId: planId,
         agentId: agentId,
         startDate: now,
-        endDate: endDate,
-        nextPaymentDate: endDate,
+        // endDate: endDate,
+        // nextPaymentDate: endDate,
       },
     });
     res.status(200).json({
@@ -885,275 +947,486 @@ agentRouter.post(
     const event = req.body;
 
     console.log('Paystack Event Received:', event);
+    const eventData = event?.data;
 
     switch (event.event) {
       case 'charge.success': {
-        const data = event.data;
-        const reference = data.reference;
-        const userId = data.metadata?.userId;
-        const planId = data.metadata?.planId;
-        const customerCode = data.customer?.customer_code;
-
-        if (userId && customerCode) {
-          const userExists = await prisma.user.findUnique({
-            where: { id: userId },
-          });
-
-          if (userExists) {
-            await prisma.paystackCustomer.upsert({
-              where: { userId },
-              update: { customerCode },
-              create: { userId, customerCode },
-            });
-          } else {
-            console.log(`User with ID ${userId} does not exist.`);
-          }
+        if (!eventData || !eventData.reference) {
+          console.error(
+            'charge.success webhook: Missing event data or reference.'
+          );
+          res.status(400).send('Bad Request');
+          return;
         }
 
-        const subscription = await prisma.subscription.findFirst({
-          where: {
-            agentId: userId,
-            isActive: true,
-          },
-          orderBy: { startDate: 'desc' },
+        const reference = eventData.reference;
+        const amountInKobo = eventData.amount;
+        const amount = amountInKobo / 100;
+        const subscriptionCode = eventData.subscription?.subscription_code;
+        const customerCode = eventData.customer?.customer_code;
+
+        let user = null;
+        const userIdFromMetadata = eventData.metadata?.userId;
+        const customerEmail = eventData.customer?.email;
+
+        if (userIdFromMetadata) {
+          user = await prisma.user.findUnique({
+            where: { id: userIdFromMetadata },
+          });
+        } else if (customerEmail) {
+          user = await prisma.user.findUnique({
+            where: { email: customerEmail },
+          });
+        }
+
+        if (!user) {
+          console.error(
+            'charge.success webhook: Could not find user from metadata or customer email.'
+          );
+          res.status(404).send('Not Found');
+          return;
+        }
+
+        // Find or create the PaystackCustomer record. This is a good practice to
+        // link Paystack's customer to your User.
+        if (customerCode) {
+          await prisma.paystackCustomer.upsert({
+            where: { customerCode: customerCode },
+            update: { userId: user.id },
+            create: { customerCode: customerCode, userId: user.id },
+          });
+        }
+
+        // Find the pending payment record using the unique reference.
+        const pendingPayment = await prisma.payment.findUnique({
+          where: { reference: reference },
         });
 
-        if (subscription) {
-          const now = new Date();
-
-          // Get plan details to determine duration
-          const plan = await prisma.subscriptionPlan.findFirst({
-            where: { tierId: planId },
-          });
-
-          let durationInDays = 30; // Default to monthly
-          if (plan?.duration === 'YEARLY') durationInDays = 365;
-
-          const endDate = new Date(
-            now.getTime() + durationInDays * 24 * 60 * 60 * 1000
-          );
-
-          await prisma.subscription.update({
-            where: { id: subscription.id },
+        // Use `create` for idempotency if no payment record exists.
+        if (pendingPayment) {
+          // Update the existing pending payment record.
+          await prisma.payment.update({
+            where: { id: pendingPayment.id },
             data: {
-              startDate: now,
-              endDate,
-              nextPaymentDate: endDate,
-              isActive: true,
+              status: 'SUCCESS',
+              amount: amount,
+              // For recurring payments, the subscriptionCode will be present.
+              // For initial payments, it will be null, and we'll link it later.
+              ...(subscriptionCode && {
+                subscription: {
+                  connect: { paystackSubscriptionCode: subscriptionCode },
+                },
+              }),
             },
           });
         } else {
-          console.log('No active subscription found for user:', userId);
-        }
-
-        const payment = await prisma.payment.findUnique({
-          where: { reference },
-        });
-
-        if (payment && payment.status === 'PENDING') {
-          await prisma.payment.update({
-            where: { reference },
+          // If no pending payment exists (e.g., for recurring charges), create one.
+          await prisma.payment.create({
             data: {
+              userId: user.id,
+              reference: reference,
+              amount: amount,
+              currency: 'NGN',
               status: 'SUCCESS',
-              subscriptionId: subscription?.id ?? null,
+              purpose: 'SUBSCRIPTION',
+              provider: 'PAYSTACK',
+              ...(subscriptionCode && {
+                subscription: {
+                  connect: { paystackSubscriptionCode: subscriptionCode },
+                },
+              }),
             },
           });
         }
 
+        // =========================================================================
+        // UPDATED LOGIC: Extend subscription dates for recurring payments.
+        // This is now more robust to handle cases where subscription_code is missing.
+        // =========================================================================
+        let subscriptionToUpdate = null;
+
+        if (subscriptionCode) {
+          // If subscription_code is available, use it directly.
+          subscriptionToUpdate = await prisma.subscription.findUnique({
+            where: { paystackSubscriptionCode: subscriptionCode },
+            include: { plan: { include: { SubscriptionPlan: true } } },
+          });
+        } else if (customerCode && eventData.plan?.plan_code) {
+          // If subscription_code is not available (as in your provided renewal event),
+          // find the active subscription using the customer code and plan code.
+          const paystackCustomer = await prisma.paystackCustomer.findUnique({
+            where: { customerCode: customerCode },
+          });
+
+          if (paystackCustomer?.userId) {
+            subscriptionToUpdate = await prisma.subscription.findFirst({
+              where: {
+                agentId: paystackCustomer.userId,
+                paystackPlanCode: eventData.plan.plan_code,
+                isActive: true,
+              },
+              include: { plan: true },
+            });
+          }
+        }
+
+        if (subscriptionToUpdate) {
+          const subscriptionPlan = await prisma.subscriptionPlan.findFirst({
+            where: {
+              tierId: subscriptionToUpdate.planId,
+              paystackPlanCode: subscriptionToUpdate.paystackPlanCode,
+            },
+          });
+
+          if (subscriptionPlan) {
+            const newEndDate = calculateNewEndDate(
+              subscriptionToUpdate.endDate ?? new Date(), //TODO MAKE SURE THIS ISNT A PROBLEM
+              subscriptionPlan.duration
+            );
+            const newNextPaymentDate = newEndDate;
+
+            await prisma.subscription.update({
+              where: { id: subscriptionToUpdate.id },
+              data: {
+                isActive: true,
+                endDate: newEndDate,
+                nextPaymentDate: newNextPaymentDate,
+              },
+            });
+          } else {
+            console.error(
+              'charge.success webhook: Could not find subscription plan in DB for recurring charge.'
+            );
+          }
+        }
         break;
       }
 
       case 'subscription.create': {
-        const data = event.data;
-        const customerCode = data.customer?.customer_code;
-        const planCode = data.plan?.plan_code;
+        const data = eventData;
         const subscriptionCode = data.subscription_code;
+        const paystackPlanCode = data.plan?.plan_code;
+        const customerCode = data.customer?.customer_code;
         const nextPaymentDate = data.next_payment_date;
-        const paystackEmailToken = data.email_token;
+        const emailToken = data.email_token;
+        const customerEmail = data.customer?.email;
 
-        if (!customerCode || !planCode || !subscriptionCode) {
-          console.log('Missing data in subscription.create webhook');
-          break;
+        if (
+          !subscriptionCode ||
+          !paystackPlanCode ||
+          !customerCode ||
+          !customerEmail
+        ) {
+          console.error('subscription.create webhook: Missing essential data.');
+          res.status(400).send('Bad Request');
+          return;
         }
 
-        const customer = await prisma.paystackCustomer.findUnique({
-          where: { customerCode },
-        });
-
-        if (!customer) {
-          console.log(
-            'No matching user found for customer code:',
-            customerCode
-          );
-          break;
-        }
-
-        const userId = customer.userId;
-
-        const internalPlan = await prisma.subscriptionPlan.findFirst({
-          where: { paystackPlanCode: planCode },
-        });
-
-        if (!internalPlan) {
-          console.log('No matching plan found for plan code:', planCode);
-          break;
-        }
-
-        // 1. Create the new subscription
-        const newSubscription = await prisma.subscription.create({
-          data: {
-            agentId: userId,
-            planId: internalPlan.tierId,
-            startDate: new Date(),
-            endDate: new Date(nextPaymentDate),
-            paystackSubscriptionCode: subscriptionCode,
-            paystackPlanCode: planCode,
-            nextPaymentDate: new Date(nextPaymentDate),
-            isActive: true,
-            paystackEmailToken,
-          },
-        });
-
-        // 2. Find older active subscriptions for this user (excluding the new one)
-        const oldSubscriptions = await prisma.subscription.findMany({
+        // Find the user and plan to link the new subscription.
+        const user = await prisma.user.findFirst({
           where: {
-            agentId: userId,
-            id: { not: newSubscription.id },
-            isActive: true,
-            // paystackSubscriptionCode: { not: null },
+            OR: [
+              { PaystackCustomer: { customerCode } },
+              { email: customerEmail },
+            ],
           },
+          include: { PaystackCustomer: true },
         });
 
-        // 3. Cancel each old subscription on Paystack + mark inactive in DB
+        // The logic for linking the paystack customer record to the user is
+        // primarily handled in the `charge.success` event, which is the most
+        // reliable place for it. This check here is a fallback.
+        if (user && !user.PaystackCustomer) {
+          await prisma.paystackCustomer.create({
+            data: { customerCode: customerCode, userId: user.id },
+          });
+        }
+
+        const subscriptionPlan = await prisma.subscriptionPlan.findFirst({
+          where: { paystackPlanCode: paystackPlanCode },
+        });
+
+        if (!user || !subscriptionPlan) {
+          console.error(
+            'subscription.create webhook: Could not find user or plan in DB.'
+          );
+          res.status(404).send('Not Found');
+          return;
+        }
+
+        // =========================================================================
+        // REFINED LOGIC: Disable all existing active subscriptions on Paystack
+        // and in the DB to prevent conflicts.
+        // =========================================================================
+        const oldSubscriptions = await prisma.subscription.findMany({
+          where: { agentId: user.id, isActive: true },
+        });
+
         for (const oldSub of oldSubscriptions) {
-          try {
-            console.log(
-              'Trying to cancel Paystack subscription:',
-              oldSub.paystackSubscriptionCode
-            );
-
-            await paystack.post(
-              `/subscription/disable`,
-              {
-                code: `${oldSub.paystackSubscriptionCode}`,
-                token: `${oldSub.paystackEmailToken}`,
-              }
-              // `/subscription/${oldSub.paystackSubscriptionCode}/disable`
-            );
-            console.log(
-              `Cancelled Paystack subscription: ${oldSub.paystackSubscriptionCode}`
-            );
-          } catch (err: any) {
-            console.error(
-              `Failed to cancel Paystack subscription: ${oldSub.paystackSubscriptionCode}`,
-              err.response?.data || err.message
-            );
+          // Disable on Paystack
+          if (oldSub.paystackSubscriptionCode && oldSub.paystackEmailToken) {
+            try {
+              await paystack.post('/subscription/disable', {
+                code: oldSub.paystackSubscriptionCode,
+                token: oldSub.paystackEmailToken,
+              });
+              console.log(
+                `Disabled Paystack subscription: ${oldSub.paystackSubscriptionCode}`
+              );
+            } catch (err: any) {
+              console.error(
+                `Failed to disable Paystack subscription: ${oldSub.paystackSubscriptionCode}`,
+                err.response?.data || err.message
+              );
+            }
           }
-
+          // Mark as inactive in local DB
           await prisma.subscription.update({
             where: { id: oldSub.id },
             data: { isActive: false },
           });
         }
 
-        // Find the most recent pending payment by user and plan (optional add time filter)
-        const payment = await prisma.payment.findFirst({
+        // Create the new subscription record.
+        const newSubscription = await prisma.subscription.create({
+          data: {
+            agentId: user.id,
+            planId: subscriptionPlan.tierId,
+            startDate: new Date(),
+            endDate: nextPaymentDate ? new Date(nextPaymentDate) : '',
+            paystackPlanCode: paystackPlanCode,
+            paystackSubscriptionCode: subscriptionCode,
+            paystackCustomerCode: customerCode,
+            paystackEmailToken: emailToken,
+            nextPaymentDate: nextPaymentDate ? new Date(nextPaymentDate) : null,
+            isActive: true,
+            manuallyGranted: false,
+          },
+        });
+
+        // Link the most recent successful payment to this subscription.
+        const recentPayment = await prisma.payment.findFirst({
           where: {
-            userId,
-            // status: 'PENDING',
-            // purpose: 'SUBSCRIPTION',
-            // provider: 'PAYSTACK',
+            userId: user.id,
+            status: 'SUCCESS',
+            purpose: 'SUBSCRIPTION',
+            subscriptionId: null,
           },
           orderBy: { createdAt: 'desc' },
         });
-        // console.log('payment: ', payment);
 
-        if (payment) {
-          console.log('Yes, payment exists');
+        if (recentPayment) {
           await prisma.payment.update({
-            where: { id: payment.id },
-            data: { subscriptionId: newSubscription.id },
-          });
-        } else {
-          console.log('No payment found to link to this subscription');
-        }
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const subscriptionCode = event.data.subscription?.subscription_code;
-        if (subscriptionCode) {
-          await prisma.subscription.updateMany({
-            where: { paystackSubscriptionCode: subscriptionCode },
-            data: { isActive: false },
-          });
-
-          // TODO Optionally: notify user by email
-        }
-        const email = event.data.customer?.sendEmailNotificationToSingleUser;
-        if (email) {
-          const agent = await prisma.user.findUnique({
-            where: { email },
-          });
-          if (!agent) {
-            console.error('No agent matches customer');
-            return;
-          }
-          const subscription = await prisma.subscription.findFirst({
-            where: {
-              paystackSubscriptionCode: subscriptionCode,
-              agentId: agent.id,
-            },
-            orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }],
-            include: { plan: { include: {} } },
-          });
-          const reference = `sub_${subscription?.plan.name}_${getBillingPeriod(
-            subscription?.startDate.toString() || '',
-            subscription?.endDate.toString() || ''
-          )}_${Date.now()}_${agent.id}`;
-          const payment = await prisma.payment.create({
+            where: { id: recentPayment.id },
             data: {
-              userId: agent.id,
-              reference,
-              amount: event.data.subscription?.amount, // store amount for record
-              provider: 'PAYSTACK',
-              purpose: 'SUBSCRIPTION',
-              status: 'FAILED',
+              subscriptionId: newSubscription.id,
             },
           });
         }
         break;
       }
 
-      case 'invoice.payment_successful': {
-        const subscriptionCode = event.data.subscription?.subscription_code;
-        const amount = event.data.amount / 100;
-        const reference = event.data.reference;
+      // =========================================================================
+      // CASE: invoice.payment_failed
+      // This event is triggered when a recurring payment attempt fails.
+      // We will now implement a grace period before fully disabling the subscription.
+      // =========================================================================
+      case 'invoice.payment_failed': {
+        const subscriptionCode = eventData.subscription?.subscription_code;
+        const amountInKobo = eventData.amount;
+        const amount = amountInKobo / 100;
+        const customerEmail = eventData.customer?.email;
 
-        const subscription = await prisma.subscription.findFirst({
+        if (!subscriptionCode) {
+          console.error(
+            'invoice.payment_failed webhook: Missing subscription code.'
+          );
+          res.status(400).send('Bad Request');
+          return;
+        }
+
+        const subscription = await prisma.subscription.findUnique({
           where: { paystackSubscriptionCode: subscriptionCode },
+          include: { plan: true },
         });
 
-        if (subscription) {
-          await prisma.payment.create({
-            data: {
-              userId: subscription.agentId,
-              subscriptionId: subscription.id,
-              amount,
-              provider: 'PAYSTACK',
-              reference,
-              purpose: 'SUBSCRIPTION',
-              status: 'SUCCESS',
-            },
-          });
+        const user = await prisma.user.findUnique({
+          where: { email: customerEmail },
+        });
+
+        const reference = `sub_${subscription?.plan.name}_${getBillingPeriod(
+          subscription?.startDate.toString() || '',
+          subscription?.endDate?.toString() || ''
+        )}_${Date.now()}_${user?.id}`;
+
+        if (subscription && user) {
+          // The subscription payment has failed. Instead of immediately
+          // disabling the subscription, we will put it into a grace period.
+          // This date can be used by a separate background job to eventually
+          // disable the subscription in the database.
+          const gracePeriodInDays = 7; // This can be configurable via your plan model.
+          const gracePeriodEndDate = addDays(new Date(), gracePeriodInDays);
 
           await prisma.subscription.update({
             where: { id: subscription.id },
             data: {
-              nextPaymentDate: new Date(event.data.next_payment_date),
-              isActive: true,
+              gracePeriodEndDate: gracePeriodEndDate,
+              // We'll keep isActive: true during the grace period. A background
+              // job will check `gracePeriodEndDate` to set it to false.
             },
           });
+
+          // Log the failed payment attempt
+          await prisma.payment.create({
+            data: {
+              userId: user.id,
+              subscriptionId: subscription.id,
+              amount: amount,
+              provider: 'PAYSTACK',
+              reference: reference,
+              purpose: 'SUBSCRIPTION',
+              status: 'FAILED',
+            },
+          });
+
+          // TODO: Add logic here to notify the user of the failed payment
+          // and the start of the grace period. This could be an email,
+          // an in-app notification, or a push notification.
+          sendEmailNotificationToSingleUser({
+            title: 'Payment Failed',
+            message: `Payment failed for user ${user.id}. Grace period started, ends on ${gracePeriodEndDate}.`,
+            email: user.email,
+            recipientId: user.id,
+          });
+          console.log(
+            `Payment failed for user ${user.id}. Grace period started, ends on ${gracePeriodEndDate}.`
+          );
+        } else {
+          // If the payment failed but we couldn't find a corresponding subscription,
+          // we'll still log the payment attempt if we have the user.
+          if (user) {
+            await prisma.payment.create({
+              data: {
+                userId: user.id,
+                amount: amount,
+                provider: 'PAYSTACK',
+                reference: reference,
+                purpose: 'SUBSCRIPTION',
+                status: 'FAILED',
+              },
+            });
+          }
+          console.error(
+            `invoice.payment_failed: Could not find user or subscription for code ${subscriptionCode}`
+          );
+        }
+        break;
+      }
+
+      // =========================================================================
+      // CASE: subscription.not_renew
+      // This event indicates that Paystack will not attempt to renew the subscription.
+      // The subscription should remain active until its end date.
+      // =========================================================================
+      case 'subscription.not_renew': {
+        const subscriptionCode = eventData?.subscription_code;
+        const customerEmail = eventData.customer?.email;
+
+        if (!subscriptionCode) {
+          console.error(
+            'subscription.not_renew webhook: Missing subscription code.'
+          );
+          res.status(400).send('Bad Request');
+          return;
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: customerEmail },
+        });
+
+        // The subscription remains active until its end date passes.
+        // A background job will handle the deactivation and downgrade.
+        // We will just notify the user here.
+        console.log(
+          `Subscription ${subscriptionCode} for user ${user?.id} will not be renewed by Paystack.`
+        );
+
+        // TODO: Send a message or email to the user notifying them that their
+        // subscription will not be renewed and will expire on its end date.
+
+        break;
+      }
+
+      // =========================================================================
+      // CASE: subscription.disable
+      // This event is sent when a subscription is explicitly disabled.
+      // We will immediately mark it as inactive and downgrade the user.
+      // =========================================================================
+      case 'subscription.disable': {
+        const subscriptionCode = eventData?.subscription_code;
+        const customerEmail = eventData.customer?.email;
+
+        if (!subscriptionCode) {
+          console.error(
+            'subscription.disable webhook: Missing subscription code.'
+          );
+          res.status(400).send('Bad Request');
+          return;
+        }
+
+        const subscription = await prisma.subscription.findUnique({
+          where: { paystackSubscriptionCode: subscriptionCode },
+        });
+
+        const user = await prisma.user.findUnique({
+          where: { email: customerEmail },
+        });
+
+        if (subscription && user) {
+          // Find the basic plan to assign to the user.
+          // NOTE: This assumes you have a plan in your database named 'Basic Tier'.
+          const basicPlan = await prisma.subscriptionPlan.findFirst({
+            where: { tier: { name: 'basic' } },
+          });
+
+          if (!basicPlan) {
+            console.error('Basic Tier plan not found. Cannot downgrade user.');
+            res.status(500).send('Internal Server Error');
+            return;
+          }
+
+          // Mark the current subscription as inactive immediately.
+          await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { isActive: false },
+          });
+          console.log(
+            `Subscription ${subscription.id} for user ${user.id} has been disabled.`
+          );
+
+          // Create a new basic subscription for the user.
+          await prisma.subscription.create({
+            data: {
+              agentId: user.id,
+              planId: basicPlan.tierId,
+              paystackPlanCode: null,
+              paystackSubscriptionCode: null,
+              paystackCustomerCode: null,
+              paystackEmailToken: null,
+              startDate: new Date(),
+              endDate: null,
+              nextPaymentDate: null,
+              isActive: true,
+              manuallyGranted: true,
+            },
+          });
+          console.log(`User ${user.id} has been downgraded to the Basic Tier.`);
+
+          // TODO: Send an email to the user notifying them of the change.
+        } else {
+          console.error(
+            `subscription.disable webhook: Could not find user or subscription for code ${subscriptionCode}`
+          );
         }
 
         break;

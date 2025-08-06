@@ -7,6 +7,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { addMonths, addYears } from 'date-fns';
 
 const data = {
   users: [
@@ -491,6 +492,15 @@ export function generateSearchName(query: SearchQuery | undefined): string {
 
 export const generate2FACode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+export const calculateNewEndDate = (currentDate: Date, duration: string) => {
+  if (duration === 'MONTHLY') {
+    return addMonths(currentDate, 1);
+  } else if (duration === 'YEARLY') {
+    return addYears(currentDate, 1);
+  }
+  return currentDate;
 };
 
 export default data;

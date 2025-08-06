@@ -115,6 +115,7 @@ leadRouter.get(
         where,
         skip,
         take: pageSize,
+        include: { property: true, user: true },
         orderBy: { createdAt: 'desc' },
       }),
       prisma.lead.count({ where }),
