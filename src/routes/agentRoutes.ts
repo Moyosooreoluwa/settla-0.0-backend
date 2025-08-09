@@ -1463,6 +1463,7 @@ agentRouter.get(
         take: pageSize,
         include: {
           subscription: { include: { plan: true } },
+          user: true,
         },
       }),
 
