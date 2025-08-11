@@ -192,6 +192,49 @@ propertyRouter.get(
       orderBy.push({ price: 'desc' });
     } else if (sort === 'oldest') {
       orderBy.push({ date_added: 'asc' });
+    } else if (sort === 'top_rated') {
+      // 1. Fetch avg ratings for properties matching the filters
+      const ratings = await prisma.propertyReview.groupBy({
+        by: ['propertyId'],
+        _avg: { rating: true },
+        where: {
+          property: where, // apply your filters here
+        },
+      });
+
+      // 2. Create a map of propertyId -> avgRating
+      const ratingMap = new Map(
+        ratings.map((r) => [r.propertyId, r._avg.rating || 0])
+      );
+
+      // 3. Fetch all filtered properties
+      const allFilteredProps = await prisma.property.findMany({
+        where,
+        include: {
+          reviews: true, // optional, remove if not needed
+        },
+      });
+
+      // 4. Sort in memory by rating desc, unrated go last
+      allFilteredProps.sort((a, b) => {
+        const ratingA = ratingMap.get(a.id) ?? -Infinity; // unrated = lowest
+        const ratingB = ratingMap.get(b.id) ?? -Infinity;
+        return ratingB - ratingA;
+      });
+
+      // 5. Paginate results
+      const pageNumber = parseInt(page);
+      const pageSize = parseInt(limit);
+      const skip = (pageNumber - 1) * pageSize;
+      const paginatedProps = allFilteredProps.slice(skip, skip + pageSize);
+
+      res.json({
+        properties: paginatedProps,
+        page: pageNumber,
+        pages: Math.ceil(allFilteredProps.length / pageSize),
+        totalItems: allFilteredProps.length,
+      });
+      return;
     } else {
       orderBy.push({ date_added: 'desc' });
     }

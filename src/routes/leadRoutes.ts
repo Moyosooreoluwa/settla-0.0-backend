@@ -25,9 +25,15 @@ leadRouter.post(
   isAuth, //For now, only users with accounts can contact agents
   asyncHandler(async (req, res) => {
     const userId = req.user.id;
-    const { message, propertyId, email, name } = req.body;
+    const { message, propertyId, email, name, agentId } = req.body;
+    console.log(message);
+    console.log(email);
+    console.log(name);
+    console.log(propertyId);
+    console.log(userId);
+
     // Validate required fields
-    if (!propertyId || !message || !userId || !email || !name) {
+    if (!message || !userId || !email || !name) {
       res
         .status(400)
         .json({ message: 'Please sign in and fill all required fields' });
@@ -35,47 +41,82 @@ leadRouter.post(
     }
 
     // Optionally check if the property exists
-    const property = await prisma.property.findUnique({
-      where: { id: propertyId },
-    });
-    if (!property) {
-      res.status(404).json({ message: 'Property not found' });
-      return;
+    if (propertyId) {
+      const property = await prisma.property.findUnique({
+        where: { id: propertyId },
+      });
+      if (!property) {
+        res.status(404).json({ message: 'Property not found' });
+        return;
+      }
+      const agent = await prisma.user.findUnique({
+        where: { id: property.agentId || '', role: 'agent' },
+      });
+      const newLead = await prisma.lead.create({
+        data: {
+          propertyId,
+          message,
+          email,
+          name,
+          status: 'new', // default to 'new' if not provided
+          userId, // the user creating the lead
+          agentId: property.agentId, // optional, can derive from property if needed
+        },
+      });
+      const newInAppNotification = await sendInAppNotificationToSingleUser({
+        recipientId: property.agentId || '',
+        title: `New Lead Received - ${agent?.name || 'Agent'}`,
+        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      });
+
+      // TODO send email notification.
+      // const newEmailNotification = await sendEmailNotificationToSingleUser({
+      //   recipientId: property.agentId || '',
+      //   title: `New Lead Received - ${agent?.name || 'Agent'}`,
+      //   message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      //   email: agent?.email,
+      // });
+
+      res.status(201).json({
+        newLead,
+        newInAppNotification,
+        // , newEmailNotification
+      });
     }
-    const agent = await prisma.user.findUnique({
-      where: { id: property.agentId || '', role: 'agent' },
-    });
+    if (agentId) {
+      const agent = await prisma.user.findUnique({
+        where: { id: agentId || '', role: 'agent' },
+      });
+      const newLead = await prisma.lead.create({
+        data: {
+          message,
+          email,
+          name,
+          status: 'new', // default to 'new' if not provided
+          userId, // the user creating the lead
+          agentId,
+        },
+      });
+      const newInAppNotification = await sendInAppNotificationToSingleUser({
+        recipientId: agentId || '',
+        title: `New Lead Received - ${agent?.name || 'Agent'}`,
+        message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      });
 
-    const newLead = await prisma.lead.create({
-      data: {
-        propertyId,
-        message,
-        email,
-        name,
-        status: 'new', // default to 'new' if not provided
-        userId, // the user creating the lead
-        agentId: property.agentId, // optional, can derive from property if needed
-      },
-    });
-    const newInAppNotification = await sendInAppNotificationToSingleUser({
-      recipientId: property.agentId || '',
-      title: `New Lead Received - ${agent?.name || 'Agent'}`,
-      message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
-    });
+      // TODO send email notification.
+      // const newEmailNotification = await sendEmailNotificationToSingleUser({
+      //   recipientId: property.agentId || '',
+      //   title: `New Lead Received - ${agent?.name || 'Agent'}`,
+      //   message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
+      //   email: agent?.email,
+      // });
 
-    // TODO send email notification.
-    // const newEmailNotification = await sendEmailNotificationToSingleUser({
-    //   recipientId: property.agentId || '',
-    //   title: `New Lead Received - ${agent?.name || 'Agent'}`,
-    //   message: `A new lead has been created for your property: ${propertyId}. Head over to your leads page to view details.`,
-    //   email: agent?.email,
-    // });
-
-    res.status(201).json({
-      newLead,
-      newInAppNotification,
-      // , newEmailNotification
-    });
+      res.status(201).json({
+        newLead,
+        newInAppNotification,
+        // , newEmailNotification
+      });
+    }
   })
 );
 

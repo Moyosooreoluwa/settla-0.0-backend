@@ -385,7 +385,7 @@ userRouter.post(
     }
 
     // Clear the code after success
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         twoFactorCode: null,
@@ -400,14 +400,14 @@ userRouter.post(
     res.status(200).json({
       message: '2FA verified',
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
         saved_properties: savedPropertyIds,
         saved_searches: savedSearchesIds,
-        twoFactorEnabled: user.twoFactorEnabled,
-        emailVerified: user.emailVerified,
+        twoFactorEnabled: updatedUser.twoFactorEnabled,
+        emailVerified: updatedUser.emailVerified,
       },
       token,
       isSignedIn: true,

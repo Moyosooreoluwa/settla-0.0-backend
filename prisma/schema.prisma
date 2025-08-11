@@ -267,17 +267,29 @@ model AgentReview {
   updatedAt   DateTime @updatedAt
 }
 
-model PropertyReview {
-  id          String   @id @default(uuid())
-  reviewer    User     @relation(fields: [reviewerId], references: [id])
-  reviewerId  String
-  property    Property @relation(fields: [propertyId], references: [id])
-  propertyId  String
-  rating      Int      // 1 to 5 stars
-  comment     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+enum ActivityCategory {
+  AUTH
+  ACCOUNT
+  USER_ACTION
+  CRITICAL
+  SYSTEM
 }
+
+model ActivityLog {
+  id          String            @id @default(uuid())
+  userId      String?
+  category    ActivityCategory
+  action      String
+  description String?
+  ipAddress   String?
+  userAgent   String?
+  changes     Json?
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
 
 
 enum PaymentStatus {
