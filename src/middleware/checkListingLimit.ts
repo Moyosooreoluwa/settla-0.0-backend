@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { TierFeatureLimits } from '../utils/visibilityConfig';
+import { TierFeatureLimits } from './visibilityConfig';
 import {
   PrismaClient,
   SubscriptionTier,

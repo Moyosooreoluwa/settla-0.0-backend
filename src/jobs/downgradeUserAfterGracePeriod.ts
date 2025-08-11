@@ -1,9 +1,11 @@
 // This is a standalone script for a background job.
 // It is intended to be run on a schedule (e.g., using a cron job).
 import cron from 'node-cron';
+import { Request as req } from 'express';
 
 // Assuming you have Prisma Client configured
 import { PrismaClient } from '@prisma/client';
+import { logActivity } from '../utils/activityLogger';
 
 const prisma = new PrismaClient();
 
@@ -72,12 +74,20 @@ cron.schedule('0 0 * * *', () => {
       // Step 3: Loop through the found subscriptions and update them.
       for (const subscription of subscriptionsToDisable) {
         // First, disable the expired subscription.
-        await prisma.subscription.update({
+        const sub = await prisma.subscription.update({
           where: { id: subscription.id },
+          include: { agent: true, plan: true },
           data: {
             isActive: false,
             gracePeriodEndDate: null, // Clear the grace period date once the subscription is disabled.
           },
+        });
+
+        await logActivity({
+          category: 'USER_ACTION',
+          action: 'USER_CANCEL_SUBSCRIPTION',
+          description: `${sub.agent?.email} cancelled ${sub.plan.name} subscription`,
+          metadata: { subscription, agent: sub.agent },
         });
         console.log(
           `Subscription ${subscription.id} for user ${subscription.agentId} has been disabled.`

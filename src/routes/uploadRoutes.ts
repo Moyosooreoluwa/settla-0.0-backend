@@ -2,7 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import express, { Request, Response } from 'express';
 import asyncHandler from 'express-async-handler';
-import { isAgent, isAgentOrAdmin, isAuth } from '../utils/auth';
+import { isAgent, isAgentOrAdmin, isAuth } from '../middleware/auth';
 
 cloudinary.config({
   // TODO CREATE ONE FOR SETTLA

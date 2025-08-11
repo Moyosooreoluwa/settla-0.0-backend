@@ -1,6 +1,7 @@
 import { PrismaClient, User } from '@prisma/client';
 import { transporter } from '../server';
 import { sendNotificationToUser } from './socket';
+import { logActivity } from './activityLogger';
 
 const prisma = new PrismaClient();
 
@@ -26,7 +27,8 @@ export const sendInAppNotificationToSingleUser = async ({
   relatedEntityId?: string;
   category?: 'SUBSCRIPTION' | 'PAYMENT' | 'ANALYTICS' | 'SYSTEM';
 }) => {
-  await prisma.notification.create({
+  const user = await prisma.user.findUnique({ where: { id: recipientId } });
+  const notification = await prisma.notification.create({
     data: {
       title,
       message,
@@ -37,6 +39,12 @@ export const sendInAppNotificationToSingleUser = async ({
       // category,
     },
   });
+  await logActivity({
+    category: 'SYSTEM',
+    action: 'SEND_NOTIFICATION',
+    description: `${user?.email} received email notification .`,
+    metadata: { notification },
+  });
   sendNotificationToUser(recipientId || '', { title, message });
 };
 
@@ -46,14 +54,21 @@ export const sendEmailNotificationToSingleUser = async ({
   email,
   recipientId,
 }: NotificationProps) => {
+  const user = await prisma.user.findUnique({ where: { id: recipientId } });
   await transporter.sendMail({
     from: `"Settla-0.0 Test" <${process.env.SMTP_USER}>`,
     to: email,
     subject: title,
     text: message,
   });
-  await prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: { title, message, type: 'EMAIL', recipientId: recipientId || '' },
+  });
+  await logActivity({
+    category: 'SYSTEM',
+    action: 'SEND_NOTIFICATION',
+    description: `${user?.email} received email notification .`,
+    metadata: { notification },
   });
 };
 

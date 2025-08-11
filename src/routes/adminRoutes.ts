@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { Duration, PrismaClient, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import { generateToken, isAdmin, isAuth } from '../utils/auth';
+import { generateToken, isAdmin, isAuth } from '../middleware/auth';
 import {
   sendEmailNotificationToSingleUser,
   sendInAppNotificationToSingleUser,
@@ -25,19 +25,39 @@ adminRouter.post(
     });
 
     if (!user) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Invalid email or password' });
       return;
     }
     if (user.role !== 'admin') {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Unauthorised' });
       return; // Added return to stop execution
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Invalid email or password' });
       return; // Added return to stop execution
     }
+    await req.logActivity({
+      category: 'AUTH',
+      action: 'USER_LOGIN',
+      description: `${user.email} signed in`,
+    });
     const token = generateToken({ id: user.id, role: user.role });
     res.status(200).json({
       message: 'Signin successful',
@@ -53,6 +73,7 @@ adminRouter.post(
   })
 );
 
+// TODO OTP FOR ADMIN
 // Get all users
 adminRouter.get(
   '/users',
@@ -137,6 +158,36 @@ adminRouter.get(
     res.json(user);
   })
 );
+
+//soft delete a user
+adminRouter.put('/user/:id'),
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const userId = req.params.id;
+    const admin = await prisma.user.findUnique({ where: { id: req.user.id } });
+
+    const user = await prisma.user.update({
+      where: { id: userId, role: 'buyer' },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+    await req.logActivity({
+      category: 'CRITICAL',
+      action: 'ADMIN_DELETE_USER',
+      description: `${admin?.email} deleted (soft) ${user.email}.`,
+      metadata: { admin, user },
+    });
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    res.json(user);
+  });
+
 //get an agent
 adminRouter.get(
   '/agents/:id',
@@ -176,6 +227,8 @@ adminRouter.put(
     const agentId = req.params.id;
     const { is_verified } = req.body;
 
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+
     const agent = await prisma.user.findUnique({
       where: { id: agentId, role: 'agent' },
     });
@@ -189,6 +242,12 @@ adminRouter.put(
       data: {
         is_verified: is_verified,
       },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'ADMIN_VERIFY_AGENT',
+      description: `${user?.email} verified agent ${agent.email}.`,
+      metadata: { agent, user },
     });
     res.json(updatedAgent);
   })
@@ -359,8 +418,10 @@ adminRouter.post(
     if (!agentId) {
       res.status(401).send({ message: 'UNo agent found' });
     }
+    const user = await prisma.user.findUnique({ where: { id: req.user.is } });
     const subscription = await prisma.subscription.findFirst({
       where: { isActive: true, agentId: agentId },
+      include: { agent: true, plan: true },
       orderBy: { startDate: 'desc' },
     });
     if (!subscription) {
@@ -408,6 +469,12 @@ adminRouter.post(
         nextPaymentDate: endDate,
       },
     });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'USER_CANCEL_SUBSCRIPTION',
+      description: `${user?.email} cancelled ${subscription.plan.name} subscription of agent ${subscription.agent.email}`,
+      metadata: { agent: subscription.agent, subscription },
+    });
     res.status(200).json({
       message: 'Subscription cancelled, reset to basic.',
       data: newSubscription,
@@ -426,8 +493,12 @@ adminRouter.post(
     if (!agentId) {
       res.status(401).send({ message: 'No agent found' });
     }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+
     const subscription = await prisma.subscription.findFirst({
       where: { isActive: true, agentId: agentId },
+      include: { plan: true, agent: true },
       orderBy: { startDate: 'desc' },
     });
     if (!subscription) {
@@ -480,8 +551,14 @@ adminRouter.post(
         nextPaymentDate: endDate,
       },
     });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'USER_CREATE_SUBSCRIPTION',
+      description: `${user?.email} created a new subscription ${subscription.plan.name} for ${subscription.agent.email}.`,
+      metadata: { subscription: newSubscription, agent: user },
+    });
     res.status(200).json({
-      message: 'Subscription cancelled, reset to basic.',
+      message: 'New Subscription Created.',
       data: newSubscription,
     });
   })
@@ -501,12 +578,20 @@ adminRouter.patch(
       throw new Error('Invalid approval status');
     }
 
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+
     const property = await prisma.property.update({
       where: { id },
       data: {
         approval_status,
         approval_notes,
       },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'USER_APPROVE_REJECT_PROPERTY',
+      description: `${user?.email} set ${property.id}'s approval status to  ${property.approval_status}.`,
+      metadata: { property, user },
     });
     //TODO send notification
     const notificationData = {
@@ -610,6 +695,7 @@ adminRouter.put(
       res.status(400).json({ message: 'Unauthorised' });
       return;
     }
+    const user = await prisma.user.findUnique({ where: { id: adminId } });
     if (!leadId) {
       res.status(400).json({ message: 'Lead not found' });
       return;
@@ -624,9 +710,21 @@ adminRouter.put(
     }
     const updatedLead = await prisma.lead.update({
       where: { id: leadId },
+      include: { agent: true, user: true },
       data: {
         status,
         closure_reason,
+      },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'USER_UPDATE_LEAD',
+      description: `${user?.email} updated a lead for ${updatedLead.agent?.name}.`,
+      changes: { before: lead, after: updatedLead },
+      metadata: {
+        lead: updatedLead,
+        user,
+        agent: updatedLead.agent,
       },
     });
     // TODO Notify both user and agent about updated
@@ -919,6 +1017,10 @@ adminRouter.post(
         res.status(400).json({ message: 'Missing required fields' });
       }
 
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+      });
+
       const newTier = await prisma.subscriptionTier.create({
         data: {
           name, // must match enum: 'basic' | 'premium' | 'enterprise'
@@ -933,6 +1035,12 @@ adminRouter.post(
         include: {
           SubscriptionPlan: true,
         },
+      });
+      req.logActivity({
+        category: 'ADMIN_ACTION',
+        action: 'USER_CREATE_TIER',
+        description: `${user?.email} created a new subscription tier.`,
+        metadata: { user, tier: newTier },
       });
 
       res.status(201).json(newTier);
@@ -951,14 +1059,24 @@ adminRouter.delete(
     const { id } = req.params;
 
     try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+      });
+
       // First delete associated plans
       await prisma.subscriptionPlan.deleteMany({
         where: { tierId: id },
       });
 
       // Then delete the tier itself
-      await prisma.subscriptionTier.delete({
+      const tier = await prisma.subscriptionTier.delete({
         where: { id },
+      });
+      req.logActivity({
+        category: 'CRITICAL',
+        action: 'USER_DELETE_TIER',
+        description: `${user?.email} deleted subscription tier ${tier.id}.`,
+        metadata: { user, tier },
       });
 
       res.json({ message: 'Subscription tier and plans deleted successfully' });
@@ -1025,6 +1143,10 @@ adminRouter.put(
   asyncHandler(async (req, res) => {
     const paymentId = req.params.id;
     const { status } = req.body;
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+    });
+
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
     });
@@ -1038,6 +1160,14 @@ adminRouter.put(
         status,
       },
     });
+    req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'USER_EDIT_PAYMENT',
+      description: `${user?.email} edited payment ${payment.id}.`,
+      changes: { before: payment, after: updatedPayment },
+      metadata: { user, payment: updatedPayment },
+    });
+
     res.json(updatedPayment);
   })
 );
@@ -1048,6 +1178,10 @@ adminRouter.post(
   isAuth,
   isAdmin,
   asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+    });
+
     const { planId, reference, amount, userId, purpose, status } = req.body;
     const plan = await prisma.subscriptionPlan.findFirst({
       where: { id: planId },
@@ -1125,6 +1259,12 @@ adminRouter.post(
           createdAt: new Date(),
         },
       });
+      req.logActivity({
+        category: 'ADMIN_ACTION',
+        action: 'USER_CREATE_PAYMENT',
+        description: `${user?.email} created payment ${payment.id}.`,
+        metadata: { user, payment },
+      });
       res.json({
         message: 'Manual subscription and payment granted successfully',
       });
@@ -1139,6 +1279,12 @@ adminRouter.post(
           purpose,
           createdAt: new Date(),
         },
+      });
+      req.logActivity({
+        category: 'ADMIN_ACTION',
+        action: 'USER_CREATE_PAYMENT',
+        description: `${user?.email} created payment ${payment.id}.`,
+        metadata: { user, payment },
       });
       res.json({ message: 'Manual payment granted successfully' });
     }

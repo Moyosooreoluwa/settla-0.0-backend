@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import { generateToken, isAuth } from '../utils/auth';
+import { generateToken, isAuth } from '../middleware/auth';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { generate2FACode, generateSearchName } from '../utils/data';
@@ -247,12 +247,22 @@ userRouter.post(
       include: { saved_properties: true, saved_searches: true },
     });
     if (!user) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).json({ message: 'Invalid email or password' });
       return;
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).json({ message: 'Invalid email or password' });
       return;
     }
@@ -296,6 +306,14 @@ userRouter.post(
     if (!user.emailVerified) {
       sendVerificationEmail({ email, verifyUrl });
     }
+    if (!user.twoFactorEnabled) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'USER_LOGIN',
+        description: `${user.email} signed in`,
+      });
+    }
+
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
     const savedSearchesIds = user.saved_searches.map((search) => search.id);
@@ -394,6 +412,12 @@ userRouter.post(
       },
     });
 
+    await req.logActivity({
+      category: 'AUTH',
+      action: 'USER_LOGIN',
+      description: `${user.email} signed in`,
+    });
+
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
     const savedSearchesIds = user.saved_searches.map((search) => search.id);
@@ -469,6 +493,11 @@ userRouter.post(
       }
 
       if (user && user.provider !== 'GOOGLE') {
+        await req.logActivity({
+          category: 'AUTH',
+          action: 'FAILED_LOGIN',
+          description: `Failed login attempt for ${email}`,
+        });
         throw new Error('Account exists. Use email and password to sign in.');
       }
 
@@ -481,6 +510,11 @@ userRouter.post(
           },
         });
       }
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'USER_LOGIN',
+        description: `${user.email} signed in`,
+      });
 
       const authToken = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
@@ -659,42 +693,42 @@ userRouter.post(
     });
   })
 );
-userRouter.post(
-  '/reset-password',
-  asyncHandler(async (req, res) => {
-    const { token, newPassword } = req.body;
+// userRouter.post(
+//   '/reset-password',
+//   asyncHandler(async (req, res) => {
+//     const { token, newPassword } = req.body;
 
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+//     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await prisma.user.findFirst({
-      where: {
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: { gte: new Date() },
-      },
-    });
+//     const user = await prisma.user.findFirst({
+//       where: {
+//         resetPasswordToken: hashedToken,
+//         resetPasswordExpires: { gte: new Date() },
+//       },
+//     });
 
-    if (!user) {
-      res.status(400);
-      throw new Error('Invalid or expired token');
-    }
+//     if (!user) {
+//       res.status(400);
+//       throw new Error('Invalid or expired token');
+//     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
+//     // Hash password
+//     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password_hash: hashedPassword,
-        resetPasswordToken: null,
-        resetPasswordExpires: null,
-      },
-    });
+//     await prisma.user.update({
+//       where: { id: user.id },
+//       data: {
+//         password_hash: hashedPassword,
+//         resetPasswordToken: null,
+//         resetPasswordExpires: null,
+//       },
+//     });
 
-    await sendPasswordChangedEmail({ email: user.email });
+//     await sendPasswordChangedEmail({ email: user.email });
 
-    res.json({ message: 'Password reset successful' });
-  })
-);
+//     res.json({ message: 'Password reset successful' });
+//   })
+// );
 
 //Edit Profile
 userRouter.put(
@@ -719,6 +753,12 @@ userRouter.put(
         name: name || user.name,
         email: email || user.email,
       },
+    });
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_EDIT_PROFILE',
+      description: `${updatedUser.email} editted profile`,
+      changes: { before: user, after: updatedUser },
     });
 
     res.json({
@@ -751,9 +791,15 @@ userRouter.patch(
 
     const newValue = !user.twoFactorEnabled;
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { twoFactorEnabled: newValue },
+    });
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_EDIT_PROFILE',
+      description: `${user.email} editted profile`,
+      changes: { before: user, after: updatedUser },
     });
 
     res.json({ message: `2FA ${newValue ? 'enabled' : 'disabled'}` });
@@ -800,6 +846,11 @@ userRouter.delete(
       where: { id: userId },
       data: { isDeleted: true, deletedAt: new Date() },
     });
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_SOFT_DELETE',
+      description: `${user.email} deleted account`,
+    });
     res.json({ message: 'User restored', user });
   })
 );
@@ -814,6 +865,11 @@ userRouter.patch(
     const user = await prisma.user.update({
       where: { id },
       data: { isDeleted: false },
+    });
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_RESTORE',
+      description: `${user.email} restored account.`,
     });
 
     res.json({ message: 'User restored', user });
@@ -875,6 +931,14 @@ userRouter.post(
         sendAlerts: sendAlerts || false,
         name: searchName,
       },
+      include: { user: true },
+    });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_SAVE_SEARCH',
+      description: `${savedSearch.user.email} saved a search.`,
+      metadata: { search: savedSearch, user: savedSearch.user },
     });
 
     res.status(201).json(savedSearch);
@@ -886,9 +950,13 @@ userRouter.delete(
   '/unsave-search/',
   isAuth,
   asyncHandler(async (req, res) => {
+    const { id } = req.user;
     const { query } = req.body;
     console.log(query);
 
+    const user = await prisma.user.findUnique({
+      where: id,
+    });
     const deleted = await prisma.savedSearch.deleteMany({
       where: {
         query: {
@@ -896,7 +964,12 @@ userRouter.delete(
         },
       },
     });
-
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_UNSAVE_SEARCH',
+      description: `${user?.email} saved a search.`,
+      metadata: { search: deleted, user },
+    });
     res.json(deleted);
   })
 );
@@ -1219,6 +1292,11 @@ userRouter.post(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { reviewerId, comment, rating } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+
     const agent = await prisma.user.findUnique({
       where: { id, role: 'agent' },
       include: { reviewsReceived: true },
@@ -1229,7 +1307,7 @@ userRouter.post(
       return;
     }
 
-    if (agent.reviewsReceived.find((x) => x.reviewerId === req.user.id)) {
+    if (agent.reviewsReceived.find((x) => x.reviewerId === user?.id)) {
       res.status(400).send({ message: 'You already submitted a review' });
       return;
     }
@@ -1242,6 +1320,13 @@ userRouter.post(
         agentId: agent.id,
       },
       include: { reviewer: true },
+    });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_POST_REVIEW',
+      description: `${user?.email} posted a review on ${agent.name}.`,
+      metadata: { agent, review, reviewer: review.reviewer },
     });
 
     res.status(201).send({
@@ -1265,7 +1350,18 @@ userRouter.put(
         rating: Number(rating),
         comment,
       },
-      include: { reviewer: true },
+      include: { reviewer: true, agent: true },
+    });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_POST_REVIEW',
+      description: `${updatedReview.reviewer.email} updated a review on ${updatedReview.agent.name}.`,
+      metadata: {
+        agent: updatedReview.agent,
+        review: updatedReview,
+        reviewer: updatedReview.reviewer,
+      },
     });
 
     res.status(201).send({
@@ -1282,8 +1378,23 @@ userRouter.delete(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    await prisma.agentReview.delete({
+    const review = await prisma.agentReview.delete({
       where: { id },
+      include: {
+        reviewer: true,
+        agent: true,
+      },
+    });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_DELETE_REVIEW',
+      description: `${review.reviewer.email} deleted a review on ${review.agent.name}.`,
+      metadata: {
+        agent: review.agent,
+        review: review,
+        reviewer: review.reviewer,
+      },
     });
 
     res.status(201).send({

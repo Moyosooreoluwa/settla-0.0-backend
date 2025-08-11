@@ -1,13 +1,18 @@
-import express, { NextFunction } from 'express';
+import express from 'express';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, SubscriptionTierType, UserRole } from '@prisma/client';
+import { PrismaClient, SubscriptionTierType } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import { AuthRequest, generateToken, isAgent, isAuth } from '../utils/auth';
+import {
+  AuthRequest,
+  generateToken,
+  isAgent,
+  isAuth,
+} from '../middleware/auth';
 import {
   TierFeatureLimits,
   TierVisibilityMap,
-} from '../utils/visibilityConfig';
+} from '../middleware/visibilityConfig';
 import { checkListingLimit } from '../middleware/checkListingLimit';
 import * as crypto from 'crypto';
 
@@ -158,10 +163,20 @@ agentRouter.post(
     });
 
     if (!user) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Invalid email or password' });
       return; // Added return to stop execution
     }
     if (user.role !== 'agent') {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Unauthorised' });
       //   return; // Added return to stop execution
     }
@@ -175,6 +190,11 @@ agentRouter.post(
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${email}`,
+      });
       res.status(400).send({ message: 'Invalid email or password' });
       //   return; // Added return to stop execution
     }
@@ -213,6 +233,11 @@ agentRouter.post(
       },
     });
     if (!user || !user.twoFactorEnabled || !user.twoFactorCode) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${user?.email}`,
+      });
       res.status(400).json({ message: '2FA not enabled or code missing' });
       return;
     }
@@ -222,6 +247,11 @@ agentRouter.post(
       !user.twoFactorExpiresAt ||
       user.twoFactorExpiresAt < new Date()
     ) {
+      await req.logActivity({
+        category: 'AUTH',
+        action: 'FAILED_LOGIN',
+        description: `Failed login attempt for ${user?.email}`,
+      });
       res.status(400).json({ message: 'Invalid or expired 2FA code' });
       return;
     }
@@ -264,6 +294,12 @@ agentRouter.post(
         },
       });
     }
+
+    await req.logActivity({
+      category: 'AUTH',
+      action: 'USER_LOGIN',
+      description: `${user.email} signed in`,
+    });
     const planName = activeSub?.plan?.name || 'basic';
     const token = generateToken({ id: user.id, role: user.role });
     res.status(200).json({
@@ -378,6 +414,13 @@ agentRouter.put(
         socials: socials || agent.socials,
         address: updatedAddress,
       },
+    });
+
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_EDIT_PROFILE',
+      description: `${updatedAgent.email} editted profile`,
+      changes: { before: agent, after: updatedAgent },
     });
     res.json({
       message: 'Profile updated successfully',
@@ -606,6 +649,13 @@ agentRouter.post(
         agent: { connect: { id: agentId } }, // Link to Agent (User)
       },
     });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_CREATE_LISTING',
+      description: `${agent.email} created a new listing`,
+      metadata: { property: newProperty, agent },
+    });
     //TODO NOTIFY FOR APPROVAL
 
     res.status(201).json(newProperty);
@@ -656,6 +706,15 @@ agentRouter.put(
     const updatedProperty = await prisma.property.update({
       where: { id: propertyId },
       data: { ...rest, lat, lon }, // Updates only fields provided in the request body
+      include: { agent: true },
+    });
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_UPDATE_LISTING',
+      description: `${updatedProperty.agent?.email} updated listing ${updatedProperty.id}`,
+      changes: { before: property, after: updatedProperty },
+      metadata: { property: updatedProperty, agent: updatedProperty.agent },
     });
     //TODO NOTIFY FOR APPROVAL
 
@@ -731,7 +790,12 @@ agentRouter.put(
         data: { is_featured: true },
       }),
     ]);
-
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_UPDATE_FEATURED',
+      description: `${agent?.email} updated featured list`,
+      metadata: { agent },
+    });
     res.status(200).json({
       message: `Featured properties updated. ${toFeature.length} set to featured, ${toUnfeature.length} unfeatured.`,
     });
@@ -793,10 +857,13 @@ agentRouter.post(
   isAgent,
   asyncHandler(async (req, res) => {
     const agentId = req.user?.id;
+
     if (!agentId) {
       res.status(401).send({ message: 'User not authenticated' });
       return;
     }
+
+    const agent = await prisma.user.findUnique({ where: { id: agentId } });
     const subscription = await prisma.subscription.findFirst({
       where: { isActive: true, agentId },
       include: { plan: { include: { SubscriptionPlan: true } } },
@@ -848,6 +915,12 @@ agentRouter.post(
         // endDate: endDate,
         // nextPaymentDate: endDate,
       },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_CANCEL_SUBSCRIPTION',
+      description: `${agent?.email} cancelled ${subscription.plan.name} subscription`,
+      metadata: { agent, subscription },
     });
     res.status(200).json({
       message: 'Subscription cancelled, reset to basic.',
@@ -1019,9 +1092,15 @@ agentRouter.post(
               }),
             },
           });
+          await req.logActivity({
+            category: 'SYSTEM',
+            action: 'PAYMENT_SUCCESSFUL',
+            description: `${user?.email} Payment successfull.`,
+            metadata: { agent: user, pendingPayment },
+          });
         } else {
           // If no pending payment exists (e.g., for recurring charges), create one.
-          await prisma.payment.create({
+          const payment = await prisma.payment.create({
             data: {
               userId: user.id,
               reference: reference,
@@ -1036,6 +1115,12 @@ agentRouter.post(
                 },
               }),
             },
+          });
+          await req.logActivity({
+            category: 'SYSTEM',
+            action: 'PAYMENT_SUCCESSFUL',
+            description: `${user?.email} Payment successfull.`,
+            metadata: { agent: user, payment },
           });
         }
 
@@ -1085,13 +1170,19 @@ agentRouter.post(
             );
             const newNextPaymentDate = newEndDate;
 
-            await prisma.subscription.update({
+            const subscription = await prisma.subscription.update({
               where: { id: subscriptionToUpdate.id },
               data: {
                 isActive: true,
                 endDate: newEndDate,
                 nextPaymentDate: newNextPaymentDate,
               },
+            });
+            await req.logActivity({
+              category: 'SYSTEM',
+              action: 'USER_RENEW_SUBSCRIPTION',
+              description: `${user?.email} renewed subscription.`,
+              metadata: { subscription, agent: user },
             });
           } else {
             console.error(
@@ -1203,7 +1294,12 @@ agentRouter.post(
             manuallyGranted: false,
           },
         });
-
+        await req.logActivity({
+          category: 'USER_ACTION',
+          action: 'USER_CREATE_SUBSCRIPTION',
+          description: `${user?.email} created a new subscription.`,
+          metadata: { subscription: newSubscription, agent: user },
+        });
         // Link the most recent successful payment to this subscription.
         const recentPayment = await prisma.payment.findFirst({
           where: {
@@ -1277,7 +1373,7 @@ agentRouter.post(
           });
 
           // Log the failed payment attempt
-          await prisma.payment.create({
+          const payment = await prisma.payment.create({
             data: {
               userId: user.id,
               subscriptionId: subscription.id,
@@ -1288,7 +1384,12 @@ agentRouter.post(
               status: 'FAILED',
             },
           });
-
+          await req.logActivity({
+            category: 'SYSTEM',
+            action: 'PAYMENT_FAILED',
+            description: `${user?.email} Payment failed.`,
+            metadata: { payment, agent: user },
+          });
           // TODO: Add logic here to notify the user of the failed payment
           // and the start of the grace period. This could be an email,
           // an in-app notification, or a push notification.
@@ -1376,6 +1477,7 @@ agentRouter.post(
 
         const subscription = await prisma.subscription.findUnique({
           where: { paystackSubscriptionCode: subscriptionCode },
+          include: { plan: true },
         });
 
         const user = await prisma.user.findUnique({
@@ -1403,9 +1505,15 @@ agentRouter.post(
           console.log(
             `Subscription ${subscription.id} for user ${user.id} has been disabled.`
           );
+          await req.logActivity({
+            category: 'USER_ACTION',
+            action: 'USER_CANCEL_SUBSCRIPTION',
+            description: `${user?.email} cancelled ${subscription.plan.name} subscription`,
+            metadata: { subscription, agent: user },
+          });
 
           // Create a new basic subscription for the user.
-          await prisma.subscription.create({
+          const newSubscription = await prisma.subscription.create({
             data: {
               agentId: user.id,
               planId: basicPlan.tierId,

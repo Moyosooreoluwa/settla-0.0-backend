@@ -1,8 +1,7 @@
 import express from 'express';
-import { Request, Response } from 'express';
-import { Prisma, PrismaClient, UserRole } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import { isAuth } from '../utils/auth';
+import { isAuth } from '../middleware/auth';
 
 const prisma = new PrismaClient();
 
@@ -343,13 +342,20 @@ propertyRouter.post(
       res.status(404).send({ message: 'Property not found' }); // Changed to .send and added return
       return;
     }
-    await prisma.user.update({
+    const user = await prisma.user.update({
       where: { id: userId },
       data: {
         saved_properties: {
           connect: { id: id },
         },
       },
+    });
+
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'AGENT_SAVE_PROPERTY',
+      description: `${user.email} saved property ${property.id}.`,
+      metadata: { user, property },
     });
 
     res.status(200).json({ message: 'Property added to saved!' });
@@ -364,13 +370,22 @@ propertyRouter.delete(
     const userId = req.user?.id;
     const { id } = req.params;
 
-    await prisma.user.update({
+    const property = await prisma.property.findUnique({ where: { id } });
+
+    const user = await prisma.user.update({
       where: { id: userId },
       data: {
         saved_properties: {
           disconnect: { id },
         },
       },
+    });
+
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'AGENT_UNSAVE_PROPERTY',
+      description: `${user.email} saved property ${property?.id}.`,
+      metadata: { user, property },
     });
 
     res.status(200).json({ message: 'Property removed from saved list.' });
@@ -409,6 +424,13 @@ propertyRouter.post(
       include: { reviewer: true },
     });
 
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_POST_REVIEW',
+      description: `${review.reviewer.email} posted a review on property ${property.title}.`,
+      metadata: { property, review, reviewer: review.reviewer },
+    });
+
     res.status(201).send({
       message: 'Review Created',
       review,
@@ -430,7 +452,18 @@ propertyRouter.put(
         rating: Number(rating),
         comment,
       },
-      include: { reviewer: true },
+      include: { reviewer: true, property: true },
+    });
+
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_POST_REVIEW',
+      description: `${updatedReview.reviewer.email} updated a review on property ${updatedReview.property.title}.`,
+      metadata: {
+        user: updatedReview.reviewer,
+        review: updatedReview,
+        property: updatedReview.property,
+      },
     });
 
     res.status(201).send({
@@ -447,8 +480,20 @@ propertyRouter.delete(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    await prisma.propertyReview.delete({
+    const review = await prisma.propertyReview.delete({
       where: { id },
+      include: { reviewer: true, property: true },
+    });
+
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_DELETE_REVIEW',
+      description: `${review.reviewer.email} deleted a review on ${review.property.title}.`,
+      metadata: {
+        property: review.property,
+        review: review,
+        reviewer: review.reviewer,
+      },
     });
 
     res.status(201).send({

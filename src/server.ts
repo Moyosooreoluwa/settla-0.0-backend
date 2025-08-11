@@ -13,6 +13,8 @@ import nodemailer from 'nodemailer';
 import http from 'http';
 import { Server } from 'socket.io';
 import './jobs/searchAlerts'; // This starts the cron job
+import { activityLoggerMiddleware } from './middleware/activityLogger';
+import { isAuth } from './middleware/auth';
 
 dotenv.config();
 const app = express();
@@ -21,6 +23,8 @@ const prisma = new PrismaClient();
 
 app.use(cors());
 app.use(express.json());
+// app.use(isAuth); // sets req.user
+app.use(activityLoggerMiddleware);
 
 // allow CORS
 const io = new Server(server, {

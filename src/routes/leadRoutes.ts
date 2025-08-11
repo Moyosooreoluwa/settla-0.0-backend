@@ -3,13 +3,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { PrismaClient, UserRole } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
-import {
-  AuthRequest,
-  generateToken,
-  isAgent,
-  isAgentOrAdmin,
-  isAuth,
-} from '../utils/auth';
+import { isAgent, isAuth } from '../middleware/auth';
 import {
   sendEmailNotificationToSingleUser,
   sendInAppNotificationToSingleUser,
@@ -40,6 +34,10 @@ leadRouter.post(
       return;
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
     // Optionally check if the property exists
     if (propertyId) {
       const property = await prisma.property.findUnique({
@@ -62,6 +60,12 @@ leadRouter.post(
           userId, // the user creating the lead
           agentId: property.agentId, // optional, can derive from property if needed
         },
+      });
+      await req.logActivity({
+        category: 'USER_ACTION',
+        action: 'USER_CREATE_LEAD',
+        description: `${user?.email} posted a review on ${agent?.name}.`,
+        metadata: { lead: newLead, user, agent },
       });
       const newInAppNotification = await sendInAppNotificationToSingleUser({
         recipientId: property.agentId || '',
@@ -96,6 +100,13 @@ leadRouter.post(
           userId, // the user creating the lead
           agentId,
         },
+      });
+
+      await req.logActivity({
+        category: 'USER_ACTION',
+        action: 'USER_CREATE_LEAD',
+        description: `${user?.email} posted a review on ${agent?.name}.`,
+        metadata: { lead: newLead, user, agent },
       });
       const newInAppNotification = await sendInAppNotificationToSingleUser({
         recipientId: agentId || '',
@@ -228,6 +239,18 @@ leadRouter.put(
       data: {
         status,
         closure_reason,
+      },
+      include: { user: true, agent: true },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_UPDATE_LEAD',
+      description: `${updatedLead.user?.email} updated a lead for ${updatedLead.agent?.name}.`,
+      changes: { before: lead, after: updatedLead },
+      metadata: {
+        lead: updatedLead,
+        user: updatedLead.user,
+        agent: updatedLead.agent,
       },
     });
     // Notify both user and agent about updated

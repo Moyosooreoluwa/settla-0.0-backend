@@ -65,6 +65,8 @@ model User {
   reviewsReceived AgentReview[] @relation("AgentReviewed")
 
   propertyReviews PropertyReview[]
+
+  ActivityLog ActivityLog[]
 }
 
 
@@ -267,12 +269,16 @@ model AgentReview {
   updatedAt   DateTime @updatedAt
 }
 
-enum ActivityCategory {
-  AUTH
-  ACCOUNT
-  USER_ACTION
-  CRITICAL
-  SYSTEM
+model PropertyReview {
+  id          String   @id @default(uuid())
+  reviewer    User     @relation(fields: [reviewerId], references: [id])
+  reviewerId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  propertyId  String
+  rating      Int      // 1 to 5 stars
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ActivityLog {
@@ -290,6 +296,14 @@ model ActivityLog {
   user User? @relation(fields: [userId], references: [id])
 }
 
+enum ActivityCategory {
+  AUTH
+  ACCOUNT
+  USER_ACTION
+  CRITICAL
+  SYSTEM
+  ADMIN_ACTION
+}
 
 
 enum PaymentStatus {
