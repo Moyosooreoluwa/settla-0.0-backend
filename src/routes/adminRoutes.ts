@@ -160,7 +160,8 @@ adminRouter.get(
 );
 
 //soft delete a user
-adminRouter.put('/user/:id'),
+adminRouter.put(
+  '/user/:id',
   isAuth,
   isAdmin,
   asyncHandler(async (req, res) => {
@@ -186,7 +187,8 @@ adminRouter.put('/user/:id'),
     }
 
     res.json(user);
-  });
+  })
+);
 
 //get an agent
 adminRouter.get(
