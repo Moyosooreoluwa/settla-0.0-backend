@@ -439,7 +439,180 @@ agentRouter.put(
   })
 );
 
-// TODO ADD PAGINATION
+//Dashboard
+agentRouter.get(
+  '/dashboard',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const agentId = req.user?.id;
+
+    if (!agentId) {
+      res.status(401).send({ message: 'User not authenticated' });
+      return;
+    }
+
+    //listings
+
+    const properties = await prisma.property.findMany({
+      where: {
+        agentId,
+      },
+    });
+
+    const propertyTotal = await prisma.property.count({
+      where: { agentId },
+    });
+    const listingCounts = await prisma.property.groupBy({
+      by: ['listing_type'],
+      where: { agentId },
+      _count: {
+        listing_type: true,
+      },
+    });
+    const listingTypeStats: Record<string, number> = {};
+    listingCounts.forEach((item) => {
+      listingTypeStats[item.listing_type] = item._count.listing_type;
+    });
+    const propertyCounts = await prisma.property.groupBy({
+      by: ['property_type'],
+      where: { agentId },
+      _count: {
+        property_type: true,
+      },
+    });
+    const propertyTypeStats: Record<string, number> = {};
+    propertyCounts.forEach((item) => {
+      propertyTypeStats[item.property_type] = item._count.property_type;
+    });
+
+    const featuredSlotsCount = await prisma.property.count({
+      where: { agentId, is_featured: true },
+    });
+
+    const approvalCounts = await prisma.property.groupBy({
+      by: ['approval_status'],
+      where: { agentId },
+      _count: {
+        approval_status: true,
+      },
+    });
+    const approvalStats: Record<string, number> = {};
+    approvalCounts.forEach((item) => {
+      approvalStats[item.approval_status] = item._count.approval_status;
+    });
+
+    const statusCounts = await prisma.property.groupBy({
+      by: ['status'],
+      where: { agentId },
+      _count: {
+        status: true,
+      },
+    });
+    const statusStats: Record<string, number> = {};
+    statusCounts.forEach((item) => {
+      statusStats[item.status] = item._count.status;
+    });
+
+    const agentReviews = await prisma.agentReview.findMany({
+      where: { agentId },
+    });
+    const propertyReviews = await prisma.propertyReview.findMany({
+      where: { property: { agentId } },
+      include: { property: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const activityLog = await prisma.activityLog.findMany({
+      where: { userId: agentId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const notifications = await prisma.notification.findMany({
+      where: { recipientId: agentId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const leads = await prisma.lead.count({ where: { agentId } });
+    const leadsCounts = await prisma.lead.groupBy({
+      where: { agentId },
+      by: ['status'],
+      _count: { status: true },
+    });
+    const leadsStats: Record<string, number> = {};
+    leadsCounts.forEach((item) => {
+      leadsStats[item.status] = item._count.status;
+    });
+    const conversionRate = (leadsStats.closed / leads) * 100 || 0;
+    const avgAgentPropertyReviews = await prisma.propertyReview.aggregate({
+      where: {
+        property: {
+          agentId,
+        },
+      },
+      _avg: {
+        rating: true,
+      },
+    });
+    const avgAgentReview = await prisma.agentReview.aggregate({
+      where: {
+        agentId,
+      },
+      _avg: {
+        rating: true,
+      },
+    });
+
+    const results = await prisma.$queryRaw<
+      { month: Date; leads_count: number }[]
+    >`
+    WITH months AS (
+      SELECT generate_series(
+        date_trunc('month', NOW()) - interval '5 months',
+        date_trunc('month', NOW()),
+        interval '1 month'
+      ) AS month
+    )
+    SELECT 
+      m.month,
+      COALESCE(COUNT(l.id), 0) AS leads_count
+    FROM months m
+    LEFT JOIN "Lead" l 
+      ON date_trunc('month', l."createdAt") = m.month
+      AND l."agentId" = ${agentId}
+    GROUP BY m.month
+    ORDER BY m.month;
+  `;
+
+    const leadsByMonths = results.map((r) => ({
+      month: r.month.toISOString().slice(0, 7), // "YYYY-MM"
+      leads: Number(r.leads_count),
+    }));
+    res.status(200).json({
+      message: 'Dashboard analytics. ',
+      listings: {
+        total: propertyTotal,
+        propertyType: propertyTypeStats,
+        listingType: listingTypeStats,
+        approvalStatus: approvalStats,
+        status: statusStats,
+        featured: featuredSlotsCount,
+        properties,
+      },
+      reviews: {
+        agentReviews,
+        propertyReviews,
+        avgAgentPropertyReviews: avgAgentPropertyReviews._avg.rating || 0,
+        avgAgentReview: avgAgentReview._avg.rating || 0,
+      },
+      leads: {
+        status: leadsStats,
+        conversionRate,
+        leadsByMonths,
+      },
+      activityLog,
+      notifications,
+    });
+  })
+);
+
 //get all properties
 agentRouter.get(
   '/properties',
@@ -544,8 +717,11 @@ agentRouter.get(
       res.status(404);
       throw new Error('Property not found');
     }
+    const logs = await prisma.activityLog.findMany({
+      where: { metadata: { path: ['agent', 'id'], equals: req.user.id } },
+    });
 
-    res.json(property);
+    res.json({ property, logs });
   })
 );
 
@@ -654,7 +830,12 @@ agentRouter.post(
       category: 'USER_ACTION',
       action: 'USER_CREATE_LISTING',
       description: `${agent.email} created a new listing`,
-      metadata: { property: newProperty, agent },
+      metadata: {
+        property: newProperty,
+        agent,
+        agentId,
+        propertyId: property_type.id,
+      },
     });
     //TODO NOTIFY FOR APPROVAL
 
@@ -714,7 +895,12 @@ agentRouter.put(
       action: 'USER_UPDATE_LISTING',
       description: `${updatedProperty.agent?.email} updated listing ${updatedProperty.id}`,
       changes: { before: property, after: updatedProperty },
-      metadata: { property: updatedProperty, agent: updatedProperty.agent },
+      metadata: {
+        property: updatedProperty,
+        agent: updatedProperty.agent,
+        agentId,
+        propertyId,
+      },
     });
     //TODO NOTIFY FOR APPROVAL
 

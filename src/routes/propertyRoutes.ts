@@ -355,7 +355,7 @@ propertyRouter.post(
       category: 'ACCOUNT',
       action: 'AGENT_SAVE_PROPERTY',
       description: `${user.email} saved property ${property.id}.`,
-      metadata: { user, property },
+      metadata: { user, userId, propertId: property.id, property },
     });
 
     res.status(200).json({ message: 'Property added to saved!' });
@@ -385,7 +385,7 @@ propertyRouter.delete(
       category: 'ACCOUNT',
       action: 'AGENT_UNSAVE_PROPERTY',
       description: `${user.email} saved property ${property?.id}.`,
-      metadata: { user, property },
+      metadata: { user, userId, propertyId: property?.id, property },
     });
 
     res.status(200).json({ message: 'Property removed from saved list.' });
