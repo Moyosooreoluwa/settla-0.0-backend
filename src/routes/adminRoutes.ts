@@ -144,9 +144,19 @@ adminRouter.get(
     const userId = req.params.id;
 
     const user = await prisma.user.findUnique({
-      where: { id: userId, role: 'buyer' },
+      where: { id: userId },
       include: {
         saved_properties: true, // Saved Properties (for buyers)
+        properties: true, // Saved Properties (for buyers)
+        Subscriptions: {
+          include: {
+            plan: true,
+          },
+        },
+        ActivityLog: { orderBy: { createdAt: 'desc' } },
+        agentReviews: { include: { agent: true } },
+        propertyReviews: { include: { property: true } },
+        reviewsReceived: { include: { agent: true } },
       },
     });
 
@@ -418,9 +428,9 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const { agentId } = req.params;
     if (!agentId) {
-      res.status(401).send({ message: 'UNo agent found' });
+      res.status(401).send({ message: 'No agent found' });
     }
-    const user = await prisma.user.findUnique({ where: { id: req.user.is } });
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const subscription = await prisma.subscription.findFirst({
       where: { isActive: true, agentId: agentId },
       include: { agent: true, plan: true },
@@ -589,17 +599,22 @@ adminRouter.patch(
         approval_notes,
       },
     });
+    if (!property) {
+      res.status(400);
+      throw new Error('Invalid  property Id');
+    }
     await req.logActivity({
       category: 'ADMIN_ACTION',
       action: 'USER_APPROVE_REJECT_PROPERTY',
       description: `${user?.email} set ${property.id}'s approval status to  ${property.approval_status}.`,
       metadata: { property, user },
     });
+
     //TODO send notification
     const notificationData = {
       title: 'Approval Status Update',
       message: `Property ${property.id}, ${property.title} status updated to ${approval_status}. It is now available for on settla.`,
-      recipientd: property.agentId || '',
+      recipientId: property.agentId || '',
     };
     await sendInAppNotificationToSingleUser(notificationData);
 

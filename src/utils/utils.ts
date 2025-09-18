@@ -27,7 +27,9 @@ export const sendInAppNotificationToSingleUser = async ({
   relatedEntityId?: string;
   category?: 'SUBSCRIPTION' | 'PAYMENT' | 'ANALYTICS' | 'SYSTEM';
 }) => {
+  console.log(recipientId);
   const user = await prisma.user.findUnique({ where: { id: recipientId } });
+
   const notification = await prisma.notification.create({
     data: {
       title,

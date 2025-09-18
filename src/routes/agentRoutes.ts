@@ -1744,14 +1744,37 @@ agentRouter.get(
     const userId = req.user.id;
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.limit as string) || 10;
+    const provider = req.query.provider as string;
+    const status = req.query.status;
     if (!userId) {
       res.status(401).send({ message: 'User not authenticated' });
       return;
     }
 
+    const where: any = {
+      userId: userId,
+    };
+
+    if (status) {
+      const statusArray = (status as string).split(',');
+      if (!statusArray.includes('all')) {
+        where.status = {
+          in: statusArray,
+        };
+      }
+    }
+    if (provider) {
+      const providerArray = (provider as string).split(',');
+      if (!providerArray.includes('all')) {
+        where.provider = {
+          in: providerArray,
+        };
+      }
+    }
+
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({
-        where: { userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -1762,7 +1785,7 @@ agentRouter.get(
       }),
 
       prisma.payment.count({
-        where: { userId },
+        where,
       }),
     ]);
 
