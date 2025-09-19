@@ -101,7 +101,8 @@ model Property {
  saved_by     User[]    @relation("saved_properties")
   approval_status    ApprovalStatus @default(pending)
   approval_notes String?
-
+isDeleted  Boolean  @default(false)
+  deletedAt DateTime? 
 //  For Rentals
   availability   String?
   tenancy_info String?
@@ -371,6 +372,7 @@ enum PropertyStatus {
   sold
   rented
   unavailable
+  unlisted
 }
 
 enum SubscriptionTierType {

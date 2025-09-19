@@ -908,6 +908,42 @@ agentRouter.put(
   })
 );
 
+//delete a listing (soft)
+agentRouter.delete(
+  '/properties/:id',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const propertyId = req.params.id;
+    const agentId = req.user?.id;
+
+    const now = new Date();
+
+    // Verify that the property belongs to this agent
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+
+    if (!property) {
+      res.status(404);
+      throw new Error('Property not found');
+    }
+
+    if (property.agentId !== agentId) {
+      res.status(403);
+      throw new Error('Not authorized to delete this property');
+    }
+
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: { isDeleted: true, deletedAt: now },
+    });
+    res.status(200).json({
+      message: `Listing Deleted`,
+    });
+  })
+);
+
 agentRouter.put(
   '/featured',
   isAuth,
