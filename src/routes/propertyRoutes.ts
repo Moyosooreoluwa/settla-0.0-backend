@@ -2,6 +2,7 @@ import express from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { isAuth } from '../middleware/auth';
+import { nanoid } from 'nanoid';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,8 @@ propertyRouter.get(
     const filters: any[] = [];
     console.log(`${req.query?.lengtth ?? 'No queries'}`);
 
+    const similarSearches = [];
+
     console.log(req.query);
     // Handle location_label parsing
     const coreFilters: any[] = [];
@@ -63,6 +66,11 @@ propertyRouter.get(
           },
         ],
       });
+      similarSearches.push({
+        id: nanoid(),
+        name: `Properties near ${location_label}`,
+        query: { location_label, radius: '+5' },
+      });
     }
 
     if (query) {
@@ -73,6 +81,11 @@ propertyRouter.get(
           { street: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
         ],
+      });
+      similarSearches.push({
+        id: nanoid(),
+        name: `Apartments like "${query}"`,
+        query: query,
       });
     }
 
@@ -94,24 +107,80 @@ propertyRouter.get(
       if (dateFilter) coreFilters.push({ date_added: { gte: dateFilter } });
     }
 
-    if (min_beds && min_beds !== 'any')
+    if (min_beds && min_beds !== 'any') {
       coreFilters.push({ bedrooms: { gte: min_beds } });
-    if (max_beds && max_beds !== 'any')
+      similarSearches.push({
+        id: nanoid(),
+        name: `${min_beds}+ bedroom homes  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { min_beds },
+      });
+    }
+    if (max_beds && max_beds !== 'any') {
       coreFilters.push({ bedrooms: { lte: max_beds } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `${max_beds} bedroom homes  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { max_beds },
+      });
+    }
 
-    if (min_baths && min_baths !== 'any')
+    if (min_baths && min_baths !== 'any') {
       coreFilters.push({ bathrooms: { gte: min_baths } });
-    if (max_baths && max_baths !== 'any')
+      similarSearches.push({
+        id: nanoid(),
+        name: `${min_baths}+ bathroom homes  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { min_baths },
+      });
+    }
+    if (max_baths && max_baths !== 'any') {
       coreFilters.push({ bathrooms: { lte: max_baths } });
-
-    if (min_price) coreFilters.push({ price: { gte: parseFloat(min_price) } });
-    if (max_price) coreFilters.push({ price: { lte: parseFloat(max_price) } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `${max_baths}+ bathroom homes  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { max_baths },
+      });
+    }
+    if (min_price) {
+      coreFilters.push({ price: { gte: parseFloat(min_price) } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `Homes around N${min_price}  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { min_price },
+      });
+    }
+    if (max_price) {
+      coreFilters.push({ price: { lte: parseFloat(max_price) } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `Homes under N${max_price}  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { max_price, min_price },
+      });
+    }
 
     if (property_type && property_type !== 'all') {
       const types = Array.isArray(property_type)
         ? property_type
         : [property_type];
       coreFilters.push({ property_type: { in: types } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `${property_type}s for sale  ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { property_type },
+      });
     }
 
     if (furnishing && furnishing !== 'all') {
@@ -121,6 +190,13 @@ propertyRouter.get(
 
     if (listing_type && listing_type !== 'all') {
       coreFilters.push({ listing_type: { equals: listing_type } });
+      similarSearches.push({
+        id: nanoid(),
+        name: `Properties for ${listing_type} ${
+          location_label ? `in ${location_label}` : ''
+        }`,
+        query: { listing_type },
+      });
     }
 
     if (status && status !== 'all') {
@@ -232,6 +308,7 @@ propertyRouter.get(
         page: pageNumber,
         pages: Math.ceil(allFilteredProps.length / pageSize),
         totalItems: allFilteredProps.length,
+        similarSearches,
       });
       return;
     } else {
@@ -262,6 +339,7 @@ propertyRouter.get(
       page: pageNumber,
       pages: Math.ceil(totalItems / pageSize),
       totalItems,
+      similarSearches,
     });
   })
 );
