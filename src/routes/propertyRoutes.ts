@@ -431,7 +431,7 @@ propertyRouter.post(
 
     await req.logActivity({
       category: 'ACCOUNT',
-      action: 'AGENT_SAVE_PROPERTY',
+      action: 'USER_SAVE_PROPERTY',
       description: `${user.email} saved property ${property.id}.`,
       metadata: { user, userId, propertId: property.id, property },
     });
@@ -462,7 +462,7 @@ propertyRouter.delete(
     await req.logActivity({
       category: 'ACCOUNT',
       action: 'AGENT_UNSAVE_PROPERTY',
-      description: `${user.email} saved property ${property?.id}.`,
+      description: `${user.email} unsaved property ${property?.id}.`,
       metadata: { user, userId, propertyId: property?.id, property },
     });
 

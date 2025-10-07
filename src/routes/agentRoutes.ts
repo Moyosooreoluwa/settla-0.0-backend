@@ -922,6 +922,7 @@ agentRouter.delete(
     // Verify that the property belongs to this agent
     const property = await prisma.property.findUnique({
       where: { id: propertyId },
+      include: { agent: true },
     });
 
     if (!property) {
@@ -937,6 +938,17 @@ agentRouter.delete(
     await prisma.property.update({
       where: { id: propertyId },
       data: { isDeleted: true, deletedAt: now },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_DELETE_LISTING',
+      description: `${property.agent?.email} deleted listing ${property.id}`,
+      metadata: {
+        property: property,
+        agent: property.agent,
+        agentId,
+        propertyId,
+      },
     });
     res.status(200).json({
       message: `Listing Deleted`,
@@ -1021,6 +1033,100 @@ agentRouter.put(
     res.status(200).json({
       message: `Featured properties updated. ${toFeature.length} set to featured, ${toUnfeature.length} unfeatured.`,
     });
+  })
+);
+
+//get all articles
+agentRouter.get(
+  '/articles',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req: Request, res: Response) => {
+    const agentId = (req as AuthRequest).user?.id;
+
+    if (!agentId) {
+      res.status(401).send({ message: 'User not authenticated' });
+      return;
+    }
+
+    // --- Filtering and Searching ---
+    const { status, searchTerm, page = '1', limit = '10' } = req.query;
+
+    const pageSize = parseInt(limit as string, 10);
+    const currentPage = parseInt(page as string, 10);
+    const skip = (currentPage - 1) * pageSize;
+
+    const where: any = {
+      authorId: agentId,
+      isDeleted: false,
+    };
+
+    // --- UPDATED: Handle comma-separated status values ---
+    if (status) {
+      const statusArray = (status as string).split(',');
+      if (!statusArray.includes('all')) {
+        where.status = {
+          in: statusArray,
+        };
+      }
+    }
+
+    // --- Original Logic: Handle searchTerm ---
+    if (searchTerm) {
+      where.OR = [
+        { title: { contains: searchTerm as string, mode: 'insensitive' } },
+        { id: { contains: searchTerm as string, mode: 'insensitive' } },
+        {
+          contentHTML: { contains: searchTerm as string, mode: 'insensitive' },
+        },
+      ];
+    }
+
+    // --- Fetching Properties with Filters and Pagination ---
+    const [articles, totalItems] = await prisma.$transaction([
+      prisma.article.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: skip,
+        take: pageSize,
+      }),
+      prisma.article.count({ where }),
+    ]);
+
+    res.json({
+      articles,
+      totalItems,
+      page: currentPage,
+      limit: pageSize,
+      totalPages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+// Get an article
+agentRouter.get(
+  '/articles/:id',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const articleId = req.params.id;
+
+    const article = await prisma.article.findUnique({
+      where: { id: articleId },
+      include: {
+        author: {},
+      }, // include agent info if needed
+    });
+
+    if (!article || article.authorId !== req.user.id) {
+      res.status(404);
+      throw new Error('Article not found');
+    }
+    const logs = await prisma.activityLog.findMany({
+      where: { metadata: { path: ['author', 'id'], equals: req.user.id } },
+    });
+
+    res.json({ article, logs });
   })
 );
 

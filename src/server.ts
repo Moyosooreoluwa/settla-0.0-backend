@@ -15,6 +15,8 @@ import helmet from 'helmet';
 import { Server } from 'socket.io';
 import './jobs/searchAlerts'; // This starts the cron job
 import { activityLoggerMiddleware } from './middleware/activityLogger';
+import articleRouter from './routes/articleRoutes';
+import commentRouter from './routes/commentRoutes';
 
 const allowedOrigins = [
   'http://localhost:3000', // local dev
@@ -178,6 +180,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/leads', leadRouter);
 app.use('/api/seed', seedRouter);
+app.use('/api/articles', articleRouter);
+app.use('/api/comments', commentRouter);
 
 // app.use((err, req, res, next) => {
 //   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;

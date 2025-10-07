@@ -67,6 +67,11 @@ model User {
   propertyReviews PropertyReview[]
 
   ActivityLog ActivityLog[]
+
+  Articles Article[]
+  saved_articles  Article[]     @relation("saved_articles")  
+
+  Comments Comment[]
 }
 
 
@@ -115,6 +120,62 @@ isDeleted  Boolean  @default(false)
    is_featured Boolean @default(false)
    reviews PropertyReview[]
 }
+
+model Article {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  contentHTML     String   // can be markdown or rich text (store raw)
+  contentJSON     String   // can be markdown or rich text (store raw)
+  // excerpt     String?  // short preview text
+  coverImage  String?  // URL of a cover image
+  status      ArticleStatus @default(DRAFT)
+  editorNotes String?
+  views       Int @default(0)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  length      Int?
+  publishedAt DateTime?
+  isDeleted   Boolean @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  tags        String[]
+  // tags        ArticleTag[] // many-to-many with tags
+
+  Comments Comment[]
+
+  User User[] @relation("saved_articles")
+}
+
+model Comment{
+  id          String   @id @default(uuid())
+  comment     String
+  isDeleted   Boolean @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  commenterId String
+  commenter   User     @relation(fields: [commenterId], references: [id])
+  articleId   String
+  article     Article @relation(fields: [articleId], references: [id])
+}
+
+// model ArticleTag {
+//   id       String     @id @default(uuid())
+//   name     String     @unique
+//   slug     String     @unique
+
+//   articles Article[] @relation("ArticleTags", references: [id])
+// }
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 
 model Lead {
   id          String    @id @default(uuid())

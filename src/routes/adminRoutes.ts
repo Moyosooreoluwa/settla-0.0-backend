@@ -8,10 +8,12 @@ import {
   sendInAppNotificationToSingleUser,
 } from '../utils/utils';
 import paystack from '../utils/paystack';
+import { estimateReadingTime, generateSlug } from '../utils/data';
 
 const prisma = new PrismaClient();
 
 const adminRouter = express.Router();
+const now = new Date();
 
 // Sign in
 adminRouter.post(
@@ -483,7 +485,7 @@ adminRouter.post(
     });
     await req.logActivity({
       category: 'ADMIN_ACTION',
-      action: 'USER_CANCEL_SUBSCRIPTION',
+      action: 'ADMIN_CANCEL_SUBSCRIPTION',
       description: `${user?.email} cancelled ${subscription.plan.name} subscription of agent ${subscription.agent.email}`,
       metadata: { agent: subscription.agent, subscription },
     });
@@ -565,7 +567,7 @@ adminRouter.post(
     });
     await req.logActivity({
       category: 'ADMIN_ACTION',
-      action: 'USER_CREATE_SUBSCRIPTION',
+      action: 'ADMIN_CREATE_SUBSCRIPTION',
       description: `${user?.email} created a new subscription ${subscription.plan.name} for ${subscription.agent.email}.`,
       metadata: { subscription: newSubscription, agent: user },
     });
@@ -605,7 +607,7 @@ adminRouter.patch(
     }
     await req.logActivity({
       category: 'ADMIN_ACTION',
-      action: 'USER_APPROVE_REJECT_PROPERTY',
+      action: 'ADMIN_APPROVE_REJECT_PROPERTY',
       description: `${user?.email} set ${property.id}'s approval status to  ${property.approval_status}.`,
       metadata: { property, user },
     });
@@ -735,7 +737,7 @@ adminRouter.put(
     });
     await req.logActivity({
       category: 'ADMIN_ACTION',
-      action: 'USER_UPDATE_LEAD',
+      action: 'ADMIN_UPDATE_LEAD',
       description: `${user?.email} updated a lead for ${updatedLead.agent?.name}.`,
       changes: { before: lead, after: updatedLead },
       metadata: {
@@ -1055,7 +1057,7 @@ adminRouter.post(
       });
       req.logActivity({
         category: 'ADMIN_ACTION',
-        action: 'USER_CREATE_TIER',
+        action: 'ADMIN_CREATE_TIER',
         description: `${user?.email} created a new subscription tier.`,
         metadata: { user, tier: newTier },
       });
@@ -1091,7 +1093,7 @@ adminRouter.delete(
       });
       req.logActivity({
         category: 'CRITICAL',
-        action: 'USER_DELETE_TIER',
+        action: 'ADMIN_DELETE_TIER',
         description: `${user?.email} deleted subscription tier ${tier.id}.`,
         metadata: { user, tier },
       });
@@ -1179,7 +1181,7 @@ adminRouter.put(
     });
     req.logActivity({
       category: 'ADMIN_ACTION',
-      action: 'USER_EDIT_PAYMENT',
+      action: 'ADMIN_EDIT_PAYMENT',
       description: `${user?.email} edited payment ${payment.id}.`,
       changes: { before: payment, after: updatedPayment },
       metadata: { user, payment: updatedPayment },
@@ -1278,7 +1280,7 @@ adminRouter.post(
       });
       req.logActivity({
         category: 'ADMIN_ACTION',
-        action: 'USER_CREATE_PAYMENT',
+        action: 'ADMIN_CREATE_PAYMENT',
         description: `${user?.email} created payment ${payment.id}.`,
         metadata: { user, payment },
       });
@@ -1299,12 +1301,446 @@ adminRouter.post(
       });
       req.logActivity({
         category: 'ADMIN_ACTION',
-        action: 'USER_CREATE_PAYMENT',
+        action: 'ADMIN_CREATE_PAYMENT',
         description: `${user?.email} created payment ${payment.id}.`,
         metadata: { user, payment },
       });
       res.json({ message: 'Manual payment granted successfully' });
     }
+  })
+);
+
+//get all articles
+adminRouter.get(
+  '/articles',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user?.id;
+
+    if (!adminId) {
+      res.status(401).send({ message: 'User not authenticated' });
+      return;
+    }
+
+    // --- Filtering and Searching ---
+    const { status, searchTerm, page = '1', limit = '10' } = req.query;
+
+    const pageSize = parseInt(limit as string, 10);
+    const currentPage = parseInt(page as string, 10);
+    const skip = (currentPage - 1) * pageSize;
+
+    const where: any = {
+      isDeleted: false,
+    };
+
+    // --- UPDATED: Handle comma-separated status values ---
+    if (status) {
+      const statusArray = (status as string).split(',');
+      if (!statusArray.includes('all')) {
+        where.status = {
+          in: statusArray,
+        };
+      }
+    }
+
+    // --- Original Logic: Handle searchTerm ---
+    if (searchTerm) {
+      where.OR = [
+        { title: { contains: searchTerm as string, mode: 'insensitive' } },
+        { id: { contains: searchTerm as string, mode: 'insensitive' } },
+        {
+          contentHTML: { contains: searchTerm as string, mode: 'insensitive' },
+        },
+      ];
+    }
+
+    // --- Fetching Properties with Filters and Pagination ---
+    const [articles, totalItems] = await prisma.$transaction([
+      prisma.article.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: skip,
+        take: pageSize,
+        include: { author: true, Comments: true },
+      }),
+      prisma.article.count({ where }),
+    ]);
+
+    res.json({
+      articles,
+      totalItems,
+      page: currentPage,
+      limit: pageSize,
+      totalPages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+//create an article
+adminRouter.post(
+  '/articles',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const {
+      title,
+      contentHTML,
+      contentJSON,
+      coverImage,
+      tags,
+    }: {
+      title: string;
+      contentHTML: string;
+      contentJSON: string;
+      coverImage: string;
+      tags: string[];
+    } = req.body;
+
+    const authorId = req.user.id;
+
+    if (
+      !authorId ||
+      !title ||
+      !tags ||
+      !coverImage ||
+      !contentHTML ||
+      !contentJSON
+    )
+      throw new Error('Insufficient Information');
+
+    if (!authorId) throw new Error('Author not found');
+
+    const author = await prisma.user.findUnique({ where: { id: authorId } });
+    if (!author) throw new Error('Author not found');
+
+    const slug = generateSlug(`${title} by ${author.name}`);
+
+    const length = estimateReadingTime(contentHTML);
+
+    const newArticle = await prisma.article.create({
+      data: {
+        title,
+        contentHTML,
+        contentJSON,
+        coverImage,
+        slug,
+        tags,
+        authorId,
+        length,
+      },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_CREATE_ARTICLE',
+      description: `${author.email} created a new article`,
+      metadata: {
+        article: newArticle,
+        author,
+        authorId,
+      },
+    });
+    //TODO NOTIFY FOR APPROVAL
+
+    res.status(201).json(newArticle);
+  })
+);
+
+// Get an article
+adminRouter.get(
+  '/articles/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const articleId = req.params.id;
+
+    const article = await prisma.article.findUnique({
+      where: { id: articleId },
+      include: {
+        author: {},
+      }, // include agent info if needed
+    });
+
+    if (!article) {
+      res.status(404);
+      throw new Error('Article not found');
+    }
+    const logs = await prisma.activityLog.findMany({
+      where: { metadata: { path: ['author', 'id'], equals: req.user.id } },
+    });
+
+    res.json({ article, logs });
+  })
+);
+
+// change article status (admin)
+adminRouter.post(
+  '/articles/status/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const authorId = req.user.id;
+    const { id } = req.params;
+
+    const {
+      status,
+      editorNotes,
+    }: {
+      status: 'PUBLISHED' | 'ARCHIVED' | 'DRAFT';
+      editorNotes?: string;
+    } = req.body;
+
+    const article = await prisma.article.findUnique({
+      where: { id },
+      include: { author: true, Comments: { select: { commenter: true } } },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: 'Article not found' });
+      return;
+    }
+
+    if (!status) throw new Error('Insufficient Information');
+    const updatedArticle = await prisma.article.update({
+      where: { id },
+      data: {
+        status,
+        editorNotes,
+      },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_UPDATE_ARTICLE',
+      description: `${article.author.email} updated article ${article.title} from ${article.status} to ${status}`,
+      changes: { before: article, after: updatedArticle },
+      metadata: {
+        article: updatedArticle,
+        authorId,
+      },
+    });
+    res.status(200).json({ message: `Article status set to ${status}.` });
+    //TODO NOTIFY BLOGGER
+  })
+);
+
+// archive article
+adminRouter.patch(
+  '/articles/:id/archive',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { id } = req.params;
+
+    const article = await prisma.article.findUnique({
+      where: { id },
+      include: { author: true, Comments: { select: { commenter: true } } },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: 'Article not found' });
+      return;
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { id: adminId, role: 'admin' },
+    });
+    if (!admin || admin.role !== 'admin') {
+      res.status(404).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const updatedArticle = await prisma.article.update({
+      where: { id },
+      data: {
+        status: 'ARCHIVED',
+      },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'ADMIN_ARCHIVE_ARTICLE',
+      description: `${admin.email} archived article ${article.title}`,
+      changes: { before: article, after: updatedArticle },
+      metadata: {
+        article: updatedArticle,
+        adminId,
+      },
+    });
+    //TODO NOTIFY FOR APPROVAL
+    res.status(200).json({ message: 'Article archived.' });
+  })
+);
+
+// unarchive article
+adminRouter.patch(
+  '/articles/:id/unarchive',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { id } = req.params;
+
+    const article = await prisma.article.findUnique({
+      where: { id },
+      include: { author: true, Comments: { select: { commenter: true } } },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: 'Article not found' });
+      return;
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { id: adminId, role: 'admin' },
+    });
+    if (!admin || admin.role !== 'admin') {
+      res.status(404).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const updatedArticle = await prisma.article.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+      },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'ADMIN_UNARCHIVE_ARTICLE',
+      description: `${admin.email} unarchived article ${article.title}`,
+      changes: { before: article, after: updatedArticle },
+      metadata: {
+        article: updatedArticle,
+        adminId,
+      },
+    });
+    //TODO NOTIFY FOR APPROVAL
+    res.status(200).json({ message: 'Article unarchived.' });
+  })
+);
+// delete article
+adminRouter.delete(
+  '/articles/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { id } = req.params;
+
+    const article = await prisma.article.findUnique({
+      where: { id },
+      include: { author: true, Comments: { select: { commenter: true } } },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: 'Article not found' });
+      return;
+    }
+
+    const admin = await prisma.user.findUnique({
+      where: { id: adminId, role: 'admin' },
+    });
+    if (!admin || admin.role !== 'admin') {
+      res.status(404).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const updatedArticle = await prisma.article.update({
+      where: { id },
+      data: {
+        isDeleted: true,
+        deletedAt: now,
+      },
+    });
+    await req.logActivity({
+      category: 'ADMIN_ACTION',
+      action: 'ADMIN_DELETE_ARTICLE',
+      description: `${admin.email} deleted article ${article.title}`,
+
+      metadata: {
+        article: updatedArticle,
+        adminId,
+      },
+    });
+    //TODO NOTIFY FOR APPROVAL
+    res.status(200).json({ message: 'Article deleted.' });
+  })
+);
+
+//edit an article
+adminRouter.post(
+  '/articles/slug/:slug',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const {
+      title,
+      contentHTML,
+      contentJSON,
+      coverImage,
+      tags,
+    }: {
+      title: string;
+      contentHTML: string;
+      contentJSON: string;
+      coverImage: string;
+      tags: string[];
+    } = req.body;
+    const adminId = req.user.id;
+
+    const { slug } = req.params;
+
+    // 1. Fetch the main article
+    const article = await prisma.article.findUnique({
+      where: { slug },
+      include: { author: true, Comments: { select: { commenter: true } } },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: 'Article not found' });
+      return;
+    }
+
+    if (!title || !tags || !coverImage || !contentHTML || !contentJSON)
+      throw new Error('Insufficient Information');
+
+    if (article.status === 'PUBLISHED')
+      throw new Error('Article published and cannot be editted.');
+
+    const author = await prisma.user.findUnique({ where: { id: adminId } });
+    console.log(req.body, author);
+    if (!author) throw new Error('Author not found');
+
+    const newSlug = generateSlug(`${title} by ${author.name}`);
+    const length = estimateReadingTime(contentHTML);
+
+    const newArticle = await prisma.article.update({
+      where: { slug },
+      data: {
+        title,
+        contentHTML,
+        contentJSON,
+        coverImage,
+        slug: newSlug,
+        tags,
+        authorId: adminId,
+        length,
+      },
+    });
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'USER_UPDATE_ARTICLE',
+      description: `${author.email} updated article ${article.title}`,
+      changes: { before: article, after: newArticle },
+      metadata: {
+        article: newArticle,
+        author,
+        adminId,
+      },
+    });
+    //TODO NOTIFY FOR APPROVAL
+
+    res.status(201).json(newArticle);
   })
 );
 

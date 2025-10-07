@@ -503,4 +503,22 @@ export const calculateNewEndDate = (currentDate: Date, duration: string) => {
   return currentDate;
 };
 
+export function estimateReadingTime(content: string): number {
+  const wordsPerMinute = 225; // average between 200–250
+  const words = content.trim().split(/\s+/).length;
+  return Math.max(1, Math.ceil(words / wordsPerMinute)); // at least 1 minute
+}
+
+export function generateSlug(title: string): string {
+  return title
+    .toLowerCase() // convert to lowercase
+    .trim() // remove leading/trailing spaces
+    .replace(/[^a-z0-9\s-]/g, '') // remove special characters
+    .replace(/\s+/g, '-') // replace spaces with hyphens
+    .replace(/-+/g, '-'); // collapse multiple hyphens
+}
+
+export const capitalizeWords = (str: string) =>
+  str.replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default data;
