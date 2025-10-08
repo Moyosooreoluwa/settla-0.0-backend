@@ -198,6 +198,54 @@ articleRouter.get(
     });
   })
 );
+//get a blogger
+articleRouter.get(
+  '/blogger/:username',
+  asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    // 1. Fetch the main article
+    const blogger = await prisma.user.findUnique({
+      where: { username },
+      include: {
+        Articles: { where: { isDeleted: false, status: 'PUBLISHED' } },
+        Comments: { select: { commenter: true } },
+      },
+    });
+
+    if (!blogger) {
+      res.status(404).json({ message: 'Blogger not found' });
+      return;
+    }
+
+    const [latestArticles, popularArticles, comments] = await Promise.all([
+      prisma.article.findMany({
+        where: { status: 'PUBLISHED', isDeleted: false },
+        orderBy: { createdAt: 'desc' },
+        include: { author: true },
+        take: 8,
+      }),
+      prisma.article.findMany({
+        where: { status: 'PUBLISHED', isDeleted: false },
+        include: { author: true },
+
+        orderBy: { views: 'desc' },
+        take: 8,
+      }),
+      prisma.comment.findMany({
+        where: { isDeleted: false, article: { author: { username } } },
+        include: { commenter: true },
+      }),
+    ]);
+
+    res.json({
+      blogger,
+      latest: latestArticles,
+      popular: popularArticles,
+      comments,
+    });
+  })
+);
 
 //create an article
 articleRouter.post(

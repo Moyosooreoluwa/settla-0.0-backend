@@ -1501,23 +1501,46 @@ adminRouter.post(
     }
 
     if (!status) throw new Error('Insufficient Information');
-    const updatedArticle = await prisma.article.update({
-      where: { id },
-      data: {
-        status,
-        editorNotes,
-      },
-    });
-    await req.logActivity({
-      category: 'USER_ACTION',
-      action: 'USER_UPDATE_ARTICLE',
-      description: `${article.author.email} updated article ${article.title} from ${article.status} to ${status}`,
-      changes: { before: article, after: updatedArticle },
-      metadata: {
-        article: updatedArticle,
-        authorId,
-      },
-    });
+
+    if (status === 'PUBLISHED') {
+      const updatedArticle = await prisma.article.update({
+        where: { id },
+        data: {
+          status,
+          editorNotes,
+          publishedAt: now,
+        },
+      });
+      await req.logActivity({
+        category: 'USER_ACTION',
+        action: 'USER_UPDATE_ARTICLE',
+        description: `${article.author.email} updated article ${article.title} from ${article.status} to ${status}`,
+        changes: { before: article, after: updatedArticle },
+        metadata: {
+          article: updatedArticle,
+          authorId,
+        },
+      });
+    } else {
+      const updatedArticle = await prisma.article.update({
+        where: { id },
+        data: {
+          status,
+          editorNotes,
+        },
+      });
+      await req.logActivity({
+        category: 'USER_ACTION',
+        action: 'USER_UPDATE_ARTICLE',
+        description: `${article.author.email} updated article ${article.title} from ${article.status} to ${status}`,
+        changes: { before: article, after: updatedArticle },
+        metadata: {
+          article: updatedArticle,
+          authorId,
+        },
+      });
+    }
+
     res.status(200).json({ message: `Article status set to ${status}.` });
     //TODO NOTIFY BLOGGER
   })

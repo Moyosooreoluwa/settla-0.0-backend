@@ -24,7 +24,16 @@ commentRouter.post(
       return;
     }
 
-    if (article.Comments.find((x) => x.commenterId === req.user.id)) {
+    if (article.authorId === req.user.id) {
+      res.status(400).send({ message: 'You cannot comment on your article. ' });
+      return;
+    }
+
+    if (
+      article.Comments.find(
+        (x) => x.commenterId === req.user.id && x.isDeleted === false
+      )
+    ) {
       res.status(400).send({ message: 'You already submitted a comment' });
       return;
     }
