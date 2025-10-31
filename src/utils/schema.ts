@@ -8,6 +8,7 @@ export const PropertyTypeEnum = z.enum([
   'detached',
   'terrace',
   'commercial',
+  'warehouse',
 ]);
 
 export const ListingTypeEnum = z.enum(['sale', 'rent', 'shortlet']);
