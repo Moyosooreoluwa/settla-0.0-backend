@@ -241,6 +241,7 @@ userRouter.post(
   '/signin',
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
+    const now = new Date();
 
     const user = await prisma.user.findUnique({
       where: { email },
@@ -312,6 +313,10 @@ userRouter.post(
         action: 'USER_LOGIN',
         description: `${user.email} signed in`,
       });
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { last_login: now },
+      });
     }
 
     const token = generateToken({ id: user.id, role: user.role });
@@ -380,6 +385,7 @@ userRouter.post(
   '/verify-2fa',
   asyncHandler(async (req, res) => {
     const { userId, code } = req.body;
+    const now = new Date();
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -418,6 +424,11 @@ userRouter.post(
       description: `${user.email} signed in`,
     });
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { last_login: now },
+    });
+
     const token = generateToken({ id: user.id, role: user.role });
     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
     const savedSearchesIds = user.saved_searches.map((search) => search.id);
@@ -444,6 +455,7 @@ userRouter.post(
   '/google',
   asyncHandler(async (req: Request, res: Response) => {
     const { token } = req.body;
+    const now = new Date();
 
     if (!token) {
       res.status(400).json({ message: 'No token provided' });
@@ -516,6 +528,11 @@ userRouter.post(
         description: `${user.email} signed in`,
       });
 
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { last_login: now },
+      });
+
       const authToken = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET as string,
@@ -575,7 +592,7 @@ userRouter.post(
       },
     });
 
-    const resetUrl = `http://localhost:3000/reset-password?token=${token}`;
+    const resetUrl = `http://localhost:3000/reset-password?token=${token}`; //TODO CHANGE THIS TO FRONTEND URL
     await sendResetPasswordEmail({ email: user.email, resetUrl }); // Implement this
 
     res.json({ message: 'Reset link sent' });
@@ -622,6 +639,7 @@ userRouter.post(
   isAuth,
   asyncHandler(async (req, res) => {
     const { userId, newPassword } = req.body;
+    const now = new Date();
 
     const user = await prisma.user.findFirst({
       where: {
@@ -643,7 +661,14 @@ userRouter.post(
         password_hash: hashedPassword,
         resetPasswordToken: null,
         resetPasswordExpires: null,
+        last_password_change: now,
       },
+    });
+    await req.logActivity({
+      category: 'ACCOUNT',
+      action: 'USER_CHANGE_PASSWORD',
+      description: `${user.email} editted profile`,
+      changes: { before: user, after: user },
     });
 
     await sendPasswordChangedEmail({ email: user.email });
@@ -693,42 +718,6 @@ userRouter.post(
     });
   })
 );
-// userRouter.post(
-//   '/reset-password',
-//   asyncHandler(async (req, res) => {
-//     const { token, newPassword } = req.body;
-
-//     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-
-//     const user = await prisma.user.findFirst({
-//       where: {
-//         resetPasswordToken: hashedToken,
-//         resetPasswordExpires: { gte: new Date() },
-//       },
-//     });
-
-//     if (!user) {
-//       res.status(400);
-//       throw new Error('Invalid or expired token');
-//     }
-
-//     // Hash password
-//     const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-//     await prisma.user.update({
-//       where: { id: user.id },
-//       data: {
-//         password_hash: hashedPassword,
-//         resetPasswordToken: null,
-//         resetPasswordExpires: null,
-//       },
-//     });
-
-//     await sendPasswordChangedEmail({ email: user.email });
-
-//     res.json({ message: 'Password reset successful' });
-//   })
-// );
 
 //Edit Profile
 userRouter.put(

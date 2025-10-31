@@ -264,7 +264,7 @@ agentRouter.post(
   '/verify-2fa',
   asyncHandler(async (req, res) => {
     const { userId, code } = req.body;
-
+    const now = new Date();
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -321,7 +321,7 @@ agentRouter.post(
       const tier = await prisma.subscriptionTier.findFirst({
         where: { name: 'basic' },
       });
-      const now = new Date();
+
       const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       const sub = await prisma.subscription.create({
         data: {
@@ -339,6 +339,11 @@ agentRouter.post(
       category: 'AUTH',
       action: 'USER_LOGIN',
       description: `${user.email} signed in`,
+    });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { last_login: now },
     });
     const planName = activeSub?.plan?.name || 'basic';
     const token = generateToken({ id: user.id, role: user.role });
