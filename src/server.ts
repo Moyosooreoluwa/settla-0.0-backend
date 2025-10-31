@@ -23,6 +23,9 @@ const allowedOrigins = [
   'http://localhost:3001', // local dev
   'http://localhost:3002', // local dev
   'https://yourfrontend.com', // production frontend
+  'http://192.168.100.53:3000/',
+  'http://192.168.100.53:3001/',
+  'http://192.168.100.53:3002/',
 ];
 
 dotenv.config();

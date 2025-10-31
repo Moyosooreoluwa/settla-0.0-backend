@@ -521,4 +521,48 @@ export function generateSlug(title: string): string {
 export const capitalizeWords = (str: string) =>
   str.replace(/\b\w/g, (char) => char.toUpperCase());
 
+export const normalizePropertyData = (entry: any) => {
+  const fieldsToStringify = [
+    'title',
+    'description',
+    'listing_type',
+    'property_type',
+    'bedrooms',
+    'bathrooms',
+    'toilets',
+    'parking_spaces',
+    'furnishing',
+    'status',
+    'street',
+    'city',
+    'state',
+    'availability',
+    'tenancy_info',
+    'service_charge',
+    'min_tenancy',
+    'currency',
+  ];
+
+  const normalized: any = {};
+
+  for (const key in entry) {
+    if (fieldsToStringify.includes(key)) {
+      normalized[key] =
+        entry[key] === null || entry[key] === undefined
+          ? ''
+          : String(entry[key]).trim();
+    } else {
+      normalized[key] = entry[key];
+    }
+  }
+
+  // Handle specific numeric fields that might come in as strings
+  if (entry.price !== undefined) normalized.price = Number(entry.price);
+  if (entry.size_sqm !== undefined)
+    normalized.size_sqm = Number(entry.size_sqm);
+  if (entry.deposit !== undefined) normalized.deposit = Number(entry.deposit);
+
+  return normalized;
+};
+
 export default data;

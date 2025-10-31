@@ -21,16 +21,56 @@ import {
   calculateNewEndDate,
   generate2FACode,
   getBillingPeriod,
+  normalizePropertyData,
 } from '../utils/data';
 import {
   send2FACodeEmail,
   sendEmailNotificationToSingleUser,
 } from '../utils/utils';
 import { addDays } from 'date-fns';
+import multer from 'multer';
+import * as XLSX from 'xlsx';
+import { propertyValidationSchema } from '../utils/schema';
+import z from 'zod';
+
+// ✅ Define type for property row (inferred from Zod)
+type PropertyInput = z.infer<typeof propertyValidationSchema>;
+
+// ✅ Define structured result types
+interface InvalidRow {
+  rowNumber: number;
+  errors: string[];
+  data: Record<string, any>;
+}
+
+interface DuplicateRow {
+  rowNumber: number;
+  data: Record<string, any>;
+  reason: string;
+}
 
 const prisma = new PrismaClient();
 
 const agentRouter = express.Router();
+
+//For bulk upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(
+        new Error('Invalid file type. Please upload a CSV or XLSX file.')
+      );
+    }
+    cb(null, true);
+  },
+});
 
 // Agent Routes
 
@@ -694,6 +734,27 @@ agentRouter.get(
       page: currentPage,
       limit: pageSize,
       totalPages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+// get property count
+agentRouter.get(
+  '/property-count',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const agentId = (req as AuthRequest).user?.id;
+
+    if (!agentId) {
+      res.status(401).send({ message: 'User not authenticated' });
+      return;
+    }
+
+    const properties = await prisma.property.findMany({ where: { agentId } });
+
+    res.json({
+      count: properties.length,
     });
   })
 );
@@ -1941,4 +2002,180 @@ agentRouter.get(
   })
 );
 
+agentRouter.post(
+  '/bulk-upload',
+  isAuth,
+  isAgent,
+  upload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded.' });
+      return;
+    }
+
+    // ✅ Parse Excel or CSV buffer
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet);
+
+    if (jsonData.length === 0) {
+      res.status(400).json({ error: 'Empty file or invalid format.' });
+      return;
+    }
+
+    // ✅ Typed arrays
+    const validRows: PropertyInput[] = [];
+    const invalidRows: InvalidRow[] = [];
+    const duplicates: DuplicateRow[] = [];
+
+    // ✅ Track seen combinations (for duplicate detection)
+    const seenRows = new Set<string>();
+
+    jsonData.forEach((row, index) => {
+      // ✅ Normalize keys
+      const normalizedRow: Record<string, any> = {};
+      for (const [key, value] of Object.entries(row)) {
+        normalizedRow[key.trim().toLowerCase()] = value;
+      }
+
+      // ✅ Convert numeric fields to strings
+      ['bedrooms', 'bathrooms', 'toilets', 'parking_spaces'].forEach(
+        (field) => {
+          if (
+            normalizedRow[field] !== undefined &&
+            normalizedRow[field] !== null
+          ) {
+            normalizedRow[field] = String(normalizedRow[field]);
+          }
+        }
+      );
+
+      // ✅ Detect duplicate rows (title + city + price)
+      const uniqueKey = `${String(
+        normalizedRow.title ?? ''
+      ).toLowerCase()}-${String(normalizedRow.city ?? '').toLowerCase()}-${
+        normalizedRow.price ?? ''
+      }`;
+
+      if (seenRows.has(uniqueKey)) {
+        duplicates.push({
+          rowNumber: index + 2,
+          data: normalizedRow,
+          reason: 'Duplicate row (same title, city, and price)',
+        });
+        return;
+      }
+      seenRows.add(uniqueKey);
+
+      // ✅ Validate with Zod
+      const result = propertyValidationSchema.safeParse(normalizedRow);
+
+      if (result.success) {
+        validRows.push(result.data);
+      } else {
+        const zodError = result.error as z.ZodError;
+        invalidRows.push({
+          rowNumber: index + 2,
+          errors: zodError.issues.map(
+            (issue) => `${issue.path.join('.')}: ${issue.message}`
+          ),
+          data: normalizedRow,
+        });
+      }
+    });
+
+    // ✅ Return summarized results
+    res.status(200).json({
+      totalRows: jsonData.length,
+      validCount: validRows.length,
+      invalidCount: invalidRows.length,
+      duplicateCount: duplicates.length,
+      validRows: validRows.slice(0, 10), // limit preview
+      invalidRows,
+      duplicates,
+      allRows: jsonData,
+    });
+  })
+);
+
+agentRouter.post(
+  '/bulk-upload/confirm',
+  isAuth,
+  isAgent,
+  asyncHandler(async (req, res) => {
+    const entries = req.body.entries; // array from frontend
+    const agent = await prisma.user.findUnique({
+      where: { id: req.user.id },
+    });
+
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      res.status(400).json({ message: 'No property entries found.' });
+      return;
+    }
+
+    const validEntries: any[] = [];
+    const invalidEntries: any[] = [];
+
+    // Normalize + validate all entries
+    for (const [index, entry] of entries.entries()) {
+      const normalized = normalizePropertyData(entry);
+      const result = propertyValidationSchema.safeParse(normalized);
+
+      if (result.success) {
+        validEntries.push(result.data);
+      } else {
+        invalidEntries.push({
+          rowNumber: index + 1,
+          message: 'Invalid data',
+          errors: result.error.flatten().fieldErrors,
+          data: normalized,
+        });
+      }
+    }
+
+    // ❌ If any invalid entries exist, abort creation
+    if (invalidEntries.length > 0) {
+      res.status(400).json({
+        message: 'Some rows failed validation. Fix them and retry.',
+        invalidCount: invalidEntries.length,
+        validCount: validEntries.length,
+        invalidRows: invalidEntries,
+      });
+      return;
+    }
+
+    const createdProperties = [];
+
+    for (const entry of validEntries) {
+      const property = await prisma.property.create({
+        data: {
+          ...entry,
+          agentId: req.user.id,
+        },
+      });
+      createdProperties.push(property);
+    }
+
+    // Log them
+
+    await req.logActivity({
+      category: 'USER_ACTION',
+      action: 'BULK_PROPERTY_UPLOAD',
+      description: `${agent?.email} bulk created ${createdProperties.length} properties,`,
+      metadata: {
+        agent,
+        agentId: agent?.id,
+        createdProperties,
+      },
+    });
+
+    res.status(201).json({
+      message: 'All properties added successfully.',
+      createdCount: createdProperties.length,
+      createdProperties,
+    });
+    return;
+  })
+);
 export default agentRouter;

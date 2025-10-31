@@ -38,6 +38,8 @@ model User {
   isDeleted  Boolean  @default(false)
   deletedAt DateTime? 
   saved_properties  Property[]     @relation("saved_properties")  
+  last_login DateTime?
+  last_password_change DateTime?
   // For Agents
   is_verified      Boolean        @default(false)
   verification_notes String?
@@ -103,11 +105,13 @@ model Property {
   lat Float?
   lon Float?
   parking_spaces  String?
- saved_by     User[]    @relation("saved_properties")
+  saved_by     User[]    @relation("saved_properties")
   approval_status    ApprovalStatus @default(pending)
   approval_notes String?
-isDeleted  Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
   deletedAt DateTime? 
+  currency currency @default(NGN)
+  video_link String?
 //  For Rentals
   availability   String?
   tenancy_info String?
@@ -116,9 +120,9 @@ isDeleted  Boolean  @default(false)
   deposit Float?
 
   leads Lead[]
-   visibility VisibilityLevel @default(low)
-   is_featured Boolean @default(false)
-   reviews PropertyReview[]
+  visibility VisibilityLevel @default(low)
+  is_featured Boolean @default(false)
+  reviews PropertyReview[]
 }
 
 model Article {
@@ -367,6 +371,11 @@ enum ActivityCategory {
   ADMIN_ACTION
 }
 
+enum currency {
+  USD
+  NGN
+}
+
 
 enum PaymentStatus {
   PENDING
@@ -414,6 +423,8 @@ enum PropertyType {
   semi_detached
   terrace
   land
+  commercial
+  warehouse
 }
 
 enum ListingType {
