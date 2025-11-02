@@ -1,13 +1,8 @@
-import express, { NextFunction } from 'express';
-import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import { PrismaClient, UserRole } from '@prisma/client';
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { isAgent, isAuth } from '../middleware/auth';
-import {
-  sendEmailNotificationToSingleUser,
-  sendInAppNotificationToSingleUser,
-} from '../utils/utils';
+import { sendInAppNotificationToSingleUser } from '../utils/utils';
 
 const prisma = new PrismaClient();
 
@@ -146,22 +141,29 @@ leadRouter.get(
       limit?: string;
       status?: string;
     };
+
     const agentId = req.user.id;
+
+    if (!agentId) {
+      res.status(400).json({ message: 'Unauthorized' });
+      return;
+    }
 
     const pageNumber = parseInt(page);
     const pageSize = parseInt(limit);
     const skip = (pageNumber - 1) * pageSize;
-    const where: any = {};
 
-    if (!agentId) {
-      res.status(400).json({ message: 'Unauthorised' });
-      return;
-    }
+    // --- Build the Prisma "where" filter ---
+    const where: any = { agentId };
+
     if (status !== 'all') {
-      where.status = status;
+      const statusArray = (status as string).split(',').map((s) => s.trim());
+      if (statusArray.length > 0) {
+        where.status = { in: statusArray };
+      }
     }
-    where.agentId = agentId;
 
+    // --- Run both queries in a single transaction ---
     const [leads, totalItems] = await prisma.$transaction([
       prisma.lead.findMany({
         where,
@@ -172,7 +174,8 @@ leadRouter.get(
       }),
       prisma.lead.count({ where }),
     ]);
-    res.status(201).json({
+
+    res.status(200).json({
       leads,
       totalItems,
       page: pageNumber,

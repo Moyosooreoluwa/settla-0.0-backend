@@ -236,7 +236,7 @@ agentRouter.post(
         description: `Failed login attempt for ${email}`,
       });
       res.status(400).send({ message: 'Invalid email or password' });
-      //   return; // Added return to stop execution
+      return; // Added return to stop execution
     }
 
     const code = generate2FACode(); // e.g., '847392'
