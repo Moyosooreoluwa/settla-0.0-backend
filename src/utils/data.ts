@@ -336,7 +336,7 @@ const data = {
   ],
   subscriptionTiers: [
     {
-      name: 'basic' as SubscriptionTierType,
+      name: 'standard' as SubscriptionTierType,
       price: 0,
       features: {
         maxListings: 'Up to 5 Listings',
@@ -351,7 +351,7 @@ const data = {
       },
     },
     {
-      name: 'premium' as SubscriptionTierType,
+      name: 'pro' as SubscriptionTierType,
       price: 4999, // assume NGN (₦) or use USD depending on your business
       features: {
         maxListings: 'Unlimited Listings',
@@ -366,7 +366,7 @@ const data = {
       },
     },
     {
-      name: 'enterprise' as SubscriptionTierType,
+      name: 'premium' as SubscriptionTierType,
       price: 19999,
       features: {
         maxListings: 'Unlimited Listings',

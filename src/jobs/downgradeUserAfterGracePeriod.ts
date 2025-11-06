@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
  * This job should be run periodically to ensure that subscriptions with
  * failed payments are eventually deactivated after a grace period has
  * been given to the user. It also automatically downgrades the user
- * to a basic plan to maintain access.
+ * to a standard plan to maintain access.
  */
 cron.schedule('0 0 * * *', () => {
   async function disableExpiredSubscriptions() {
@@ -25,19 +25,19 @@ cron.schedule('0 0 * * *', () => {
     );
 
     try {
-      // Step 1: Find a basic/free plan to assign to users who are being downgraded.
-      // NOTE: This assumes you have a plan in your database named 'Basic Tier'.
+      // Step 1: Find a standard/free plan to assign to users who are being downgraded.
+      // NOTE: This assumes you have a plan in your database named 'Standard Tier'.
       // You may need to adjust this query to match your schema (e.g., `isFree: true`).
-      const basicPlan = await prisma.subscriptionPlan.findFirst({
+      const standardPlan = await prisma.subscriptionPlan.findFirst({
         where: {
           tier: {
-            name: 'basic',
+            name: 'standard',
           },
         },
       });
 
-      if (!basicPlan) {
-        console.error('Basic Tier plan not found. Cannot downgrade users.');
+      if (!standardPlan) {
+        console.error('Standard Tier plan not found. Cannot downgrade users.');
         return;
       }
 
@@ -93,11 +93,11 @@ cron.schedule('0 0 * * *', () => {
           `Subscription ${subscription.id} for user ${subscription.agentId} has been disabled.`
         );
 
-        // Then, create a new basic subscription for the user.
+        // Then, create a new standard subscription for the user.
         await prisma.subscription.create({
           data: {
             agentId: subscription.agentId,
-            planId: basicPlan.tierId,
+            planId: standardPlan.tierId,
             paystackPlanCode: null, // No Paystack plan code for a manually granted plan.
             paystackSubscriptionCode: null,
             paystackCustomerCode: null,
@@ -110,7 +110,7 @@ cron.schedule('0 0 * * *', () => {
           },
         });
         console.log(
-          `User ${subscription.agentId} has been downgraded to the Basic Tier.`
+          `User ${subscription.agentId} has been downgraded to the Standard Tier.`
         );
       }
 

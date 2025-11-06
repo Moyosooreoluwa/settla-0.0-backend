@@ -43,7 +43,7 @@ export const checkListingLimit = async (
   }
   const planName = activeSub[0].plan.name;
 
-  const tier = planName as SubscriptionTierType; // 'basic' | 'premium' | 'enterprise'
+  const tier = planName as SubscriptionTierType; // 'Standard' | 'pro' | 'premium'
   const limit = TierFeatureLimits[tier].maxListings;
 
   if (agent?.properties?.length && agent.properties.length >= limit) {

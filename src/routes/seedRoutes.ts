@@ -10,19 +10,19 @@ seedRouter.post(
   '/',
   asyncHandler(async (req, res) => {
     // Optional: Clear existing data (order matters due to relations)
-    await prisma.searchAlertLog.deleteMany({});
-    await prisma.savedSearch.deleteMany({});
-    await prisma.notification.deleteMany({});
-    await prisma.lead.deleteMany({});
-    await prisma.agentReview.deleteMany({});
-    await prisma.propertyReview.deleteMany({});
-    await prisma.property.deleteMany({});
-    await prisma.subscription.deleteMany({});
-    await prisma.subscriptionPlan.deleteMany({});
-    await prisma.subscriptionTier.deleteMany({});
-    await prisma.payment.deleteMany({});
-    await prisma.paystackCustomer.deleteMany({});
-    await prisma.user.deleteMany({});
+    // await prisma.searchAlertLog.deleteMany({});
+    // await prisma.savedSearch.deleteMany({});
+    // await prisma.notification.deleteMany({});
+    // await prisma.lead.deleteMany({});
+    // await prisma.agentReview.deleteMany({});
+    // await prisma.propertyReview.deleteMany({});
+    // await prisma.property.deleteMany({});
+    // await prisma.subscription.deleteMany({});
+    // await prisma.subscriptionPlan.deleteMany({});
+    // await prisma.subscriptionTier.deleteMany({});
+    // await prisma.payment.deleteMany({});
+    // await prisma.paystackCustomer.deleteMany({});
+    // await prisma.user.deleteMany({});
 
     // Step 1: Seed users and properties
     const createdUsers = await prisma.user.createMany({ data: data.users });
@@ -31,10 +31,10 @@ seedRouter.post(
     });
 
     // Step 2: Create subscription tiers
-    const [basicTier, premiumTier, enterpriseTier] = await Promise.all([
+    const [standardTier, proTier, premiumTier] = await Promise.all([
       prisma.subscriptionTier.create({
         data: {
-          name: 'basic',
+          name: 'standard',
           rank: 1,
           features: {
             maxListings: 'Up to 5 Listings',
@@ -47,12 +47,12 @@ seedRouter.post(
             boosters: false,
             pow: false,
           },
-          description: 'Basic tier for entry-level agents',
+          description: 'Standard tier for entry-level agents',
         },
       }),
       prisma.subscriptionTier.create({
         data: {
-          name: 'premium',
+          name: 'pro',
           rank: 2,
           features: {
             maxListings: 'Unlimited Listings',
@@ -70,7 +70,7 @@ seedRouter.post(
       }),
       prisma.subscriptionTier.create({
         data: {
-          name: 'enterprise',
+          name: 'premium',
           rank: 3,
           features: {
             maxListings: 'Unlimited Listings',
@@ -92,31 +92,31 @@ seedRouter.post(
     await prisma.subscriptionPlan.createMany({
       data: [
         {
-          tierId: basicTier.id,
+          tierId: standardTier.id,
           duration: 'MONTHLY',
           price: 0,
           paystackPlanCode: '',
         },
         {
-          tierId: premiumTier.id,
+          tierId: proTier.id,
           duration: 'MONTHLY',
           price: 5000,
           paystackPlanCode: 'PLN_hmqbgdegudsrnhg',
         },
         {
-          tierId: premiumTier.id,
+          tierId: proTier.id,
           duration: 'YEARLY',
           price: 55000,
           paystackPlanCode: 'PLN_i7bn4gajjge4hbm',
         },
         {
-          tierId: enterpriseTier.id,
+          tierId: premiumTier.id,
           duration: 'MONTHLY',
           price: 10000,
           paystackPlanCode: 'PLN_r2d48hghnbx2mvk',
         },
         {
-          tierId: enterpriseTier.id,
+          tierId: premiumTier.id,
           duration: 'YEARLY',
           price: 100000,
           paystackPlanCode: 'PLN_j8fusfihco7fhkq',
@@ -133,13 +133,13 @@ seedRouter.post(
 
       const random = Math.floor(Math.random() * 3);
       if (random === 0) {
-        tier = basicTier;
+        tier = standardTier;
         visibility = 'low';
       } else if (random === 1) {
-        tier = premiumTier;
+        tier = proTier;
         visibility = 'medium';
       } else {
-        tier = enterpriseTier;
+        tier = premiumTier;
         visibility = 'high';
       }
 

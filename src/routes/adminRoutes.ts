@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { Duration, PrismaClient, User } from '@prisma/client';
+import { Duration, PrismaClient, ReportStatus, User } from '@prisma/client';
 import asyncHandler from 'express-async-handler';
 import { generateToken, isAdmin, isAuth } from '../middleware/auth';
 import {
@@ -468,7 +468,7 @@ adminRouter.post(
       );
     }
     const plan = await prisma.subscriptionTier.findFirst({
-      where: { name: 'basic' },
+      where: { name: 'standard' },
     });
     const planId = plan?.id || '';
     const now = new Date();
@@ -490,7 +490,7 @@ adminRouter.post(
       metadata: { agent: subscription.agent, subscription },
     });
     res.status(200).json({
-      message: 'Subscription cancelled, reset to basic.',
+      message: 'Subscription cancelled, reset to standard.',
       data: newSubscription,
     });
   })
@@ -962,7 +962,7 @@ adminRouter.put(
     const { id } = req.params;
     const { name, features, monthlyPrice, yearlyPrice, description } =
       req.body as {
-        name?: 'basic' | 'premium' | 'enterprise';
+        name?: 'standard' | 'pro' | 'premium';
         features?: string[];
         monthlyPrice?: number;
         yearlyPrice?: number;
@@ -1042,7 +1042,7 @@ adminRouter.post(
 
       const newTier = await prisma.subscriptionTier.create({
         data: {
-          name, // must match enum: 'basic' | 'premium' | 'enterprise'
+          name, // must match enum: 'standard' | 'pro' | 'premium'
           features,
           SubscriptionPlan: {
             create: [
@@ -1764,6 +1764,166 @@ adminRouter.post(
     //TODO NOTIFY FOR APPROVAL
 
     res.status(201).json(newArticle);
+  })
+);
+
+adminRouter.get(
+  '/reports',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const adminId = req.user?.id;
+
+    if (!adminId) {
+      res.status(401).send({ message: 'User not authenticated' });
+      return;
+    }
+
+    // --- Filtering and Searching ---
+    const {
+      targetType,
+      target,
+      handledBy,
+      status,
+      page = '1',
+      limit = '10',
+    } = req.query;
+
+    const pageSize = parseInt(limit as string, 10);
+    const currentPage = parseInt(page as string, 10);
+    const skip = (currentPage - 1) * pageSize;
+
+    const where: any = {};
+
+    if (status) {
+      const statusArray = (status as string).split(',');
+      if (!statusArray.includes('all')) {
+        where.status = {
+          in: statusArray,
+        };
+      }
+    }
+
+    // --- UPDATED: Handle comma-separated status values ---
+    if (targetType && targetType !== 'all') {
+      where.targetType = targetType;
+    }
+
+    // --- UPDATED: Handle comma-separated status values ---
+    if (target) {
+      const targetArray = (target as string).split(',');
+      if (!targetArray.includes('all')) {
+        if (targetType === 'AGENT') {
+          where.targetUserId = {
+            in: targetArray,
+          };
+        } else {
+          where.targetPropertyId = {
+            in: targetArray,
+          };
+        }
+      }
+    }
+    // --- UPDATED: Handle comma-separated status values ---
+    if (handledBy) {
+      const handledByArray = (handledBy as string).split(',');
+      if (!handledByArray.includes('all')) {
+        where.handledById = {
+          in: handledByArray,
+        };
+      }
+    }
+
+    // --- Fetching Properties with Filters and Pagination ---
+    const [reports, totalItems] = await prisma.$transaction([
+      prisma.report.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: skip,
+        take: pageSize,
+        include: {
+          reporter: true,
+          handledBy: true,
+          targetProperty: true,
+          targetUser: true,
+        },
+      }),
+      prisma.report.count({ where }),
+    ]);
+
+    res.json({
+      reports,
+      totalItems,
+      page: currentPage,
+      limit: pageSize,
+      totalPages: Math.ceil(totalItems / pageSize),
+    });
+  })
+);
+
+adminRouter.get(
+  '/reports/:id',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const reportId = req.params.id;
+
+    const report = await prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        reporter: true,
+        handledBy: true,
+        targetProperty: true,
+        targetUser: true,
+      },
+    });
+
+    if (!report) {
+      res.status(404);
+      throw new Error('Report not found');
+    }
+
+    res.status(201).json({ report });
+  })
+);
+
+adminRouter.post(
+  '/reports/:id/action',
+  isAuth,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const handlerId = req.user.Id;
+    const reportId = req.params.id;
+
+    const { adminNotes, actionTaken, status } = req.body as {
+      adminNotes: string;
+      actionTaken: string;
+      status: ReportStatus;
+    };
+
+    const report = await prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        reporter: true,
+        handledBy: true,
+      },
+    });
+
+    if (!report) {
+      res.status(404);
+      throw new Error('Report not found');
+    }
+
+    const updatedReport = await prisma.report.update({
+      where: { id: reportId },
+      data: {
+        adminNotes: adminNotes || report.adminNotes,
+        actionTaken: actionTaken || report.actionTaken,
+        status: status || report.status,
+        handledById: handlerId,
+      },
+    });
+    res.status(201).json({ updatedReport });
   })
 );
 

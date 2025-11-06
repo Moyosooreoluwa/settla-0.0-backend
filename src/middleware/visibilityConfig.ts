@@ -6,9 +6,9 @@ import {
 
 export const TierVisibilityMap: Record<SubscriptionTierType, VisibilityLevel> =
   {
-    basic: 'low',
-    premium: 'medium',
-    enterprise: 'high',
+    standard: 'low',
+    pro: 'medium',
+    premium: 'high',
   };
 
 export const TierFeatureLimits: Record<
@@ -19,17 +19,17 @@ export const TierFeatureLimits: Record<
     visibility: VisibilityLevel;
   }
 > = {
-  basic: {
+  standard: {
     maxListings: 5,
     featuredSlots: 1,
     visibility: 'low',
   },
-  premium: {
+  pro: {
     maxListings: 30,
     featuredSlots: 2,
     visibility: 'medium',
   },
-  enterprise: {
+  premium: {
     maxListings: 100,
     featuredSlots: 5,
     visibility: 'high',

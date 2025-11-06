@@ -141,7 +141,7 @@ agentRouter.post(
         logo: newUser.logo,
         is_verified: newUser.is_verified,
         bio: newUser.bio,
-        subscriptionTier: 'basic',
+        subscriptionTier: 'standard',
         twoFactorEnabled: newUser.twoFactorEnabled,
       },
       token,
@@ -319,7 +319,7 @@ agentRouter.post(
     if (!activeSub) {
       console.log('No active plan');
       const tier = await prisma.subscriptionTier.findFirst({
-        where: { name: 'basic' },
+        where: { name: 'standard' },
       });
 
       const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -345,7 +345,7 @@ agentRouter.post(
       where: { id: user.id },
       data: { last_login: now },
     });
-    const planName = activeSub?.plan?.name || 'basic';
+    const planName = activeSub?.plan?.name || 'standard';
     const token = generateToken({ id: user.id, role: user.role });
     res.status(200).json({
       message: 'Signin successful',
@@ -1056,7 +1056,7 @@ agentRouter.put(
     }
     const planName = activeSub[0].plan.name;
 
-    const tier: SubscriptionTierType = planName || 'basic';
+    const tier: SubscriptionTierType = planName || 'standard';
     const featureLimit = TierFeatureLimits[tier].featuredSlots;
 
     if (properties.length > featureLimit) {
@@ -1295,7 +1295,7 @@ agentRouter.post(
     }
 
     const plan = await prisma.subscriptionTier.findFirst({
-      where: { name: 'basic' },
+      where: { name: 'standard' },
     });
     const planId = plan?.id || '';
     const now = new Date();
@@ -1317,7 +1317,7 @@ agentRouter.post(
       metadata: { agent, subscription },
     });
     res.status(200).json({
-      message: 'Subscription cancelled, reset to basic.',
+      message: 'Subscription cancelled, reset to standard.',
       data: newSubscription,
     });
   })
@@ -1879,14 +1879,16 @@ agentRouter.post(
         });
 
         if (subscription && user) {
-          // Find the basic plan to assign to the user.
-          // NOTE: This assumes you have a plan in your database named 'Basic Tier'.
-          const basicPlan = await prisma.subscriptionPlan.findFirst({
-            where: { tier: { name: 'basic' } },
+          // Find the standard plan to assign to the user.
+          // NOTE: This assumes you have a plan in your database named 'Standard Tier'.
+          const standardPlan = await prisma.subscriptionPlan.findFirst({
+            where: { tier: { name: 'standard' } },
           });
 
-          if (!basicPlan) {
-            console.error('Basic Tier plan not found. Cannot downgrade user.');
+          if (!standardPlan) {
+            console.error(
+              'Standard Tier plan not found. Cannot downgrade user.'
+            );
             res.status(500).send('Internal Server Error');
             return;
           }
@@ -1906,11 +1908,11 @@ agentRouter.post(
             metadata: { subscription, agent: user },
           });
 
-          // Create a new basic subscription for the user.
+          // Create a new standard subscription for the user.
           const newSubscription = await prisma.subscription.create({
             data: {
               agentId: user.id,
-              planId: basicPlan.tierId,
+              planId: standardPlan.tierId,
               paystackPlanCode: null,
               paystackSubscriptionCode: null,
               paystackCustomerCode: null,
@@ -1922,7 +1924,9 @@ agentRouter.post(
               manuallyGranted: true,
             },
           });
-          console.log(`User ${user.id} has been downgraded to the Basic Tier.`);
+          console.log(
+            `User ${user.id} has been downgraded to the Standard Tier.`
+          );
 
           // TODO: Send an email to the user notifying them of the change.
         } else {

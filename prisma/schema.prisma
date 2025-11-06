@@ -14,341 +14,287 @@ datasource db {
 }
 
 model User {
-  id               String         @id @default(uuid())
-  name             String
-  email            String         @unique
-  password_hash    String
-  role             UserRole
-  username  String?   @unique
-  phone_number     String?
-  logo  String?
-  bio String?
-  emailVerified      Boolean  @default(false)
-  verificationToken  String?
-  resetPasswordToken    String?  @unique
-  resetPasswordExpires  DateTime?
-   twoFactorEnabled    Boolean  @default(true)
-  twoFactorCode       String?  // stores generated 2FA code temporarily
-  twoFactorExpiresAt  DateTime? // expiry time for the 2FA code
-  resetPasswordCode String?
+  id                         String            @id @default(uuid())
+  name                       String
+  email                      String            @unique
+  password_hash              String
+  role                       UserRole
+  username                   String?           @unique
+  phone_number               String?
+  logo                       String?
+  bio                        String?
+  emailVerified              Boolean           @default(false)
+  verificationToken          String?
+  resetPasswordToken         String?           @unique
+  resetPasswordExpires       DateTime?
+  twoFactorEnabled           Boolean           @default(true)
+  twoFactorCode              String?
+  twoFactorExpiresAt         DateTime?
+  resetPasswordCode          String?
   resetPasswordCodeExpiresAt DateTime?
-  created_at       DateTime       @default(now())
-  updated_at       DateTime       @updatedAt
-  provider AuthProvider @default(CREDENTIALS)
-  isDeleted  Boolean  @default(false)
-  deletedAt DateTime? 
-  saved_properties  Property[]     @relation("saved_properties")  
-  last_login DateTime?
-  last_password_change DateTime?
-  // For Agents
-  is_verified      Boolean        @default(false)
-  verification_notes String?
-  verification_docs Json?          // Changed to JSON
-  properties       Property[]     @relation("user_properties") // properties this user owns (agent)
-  address Json?
-  socials Json?
-  // New relations for leads
-  submittedLeads   Lead[]         @relation("LeadSubmitter")  // leads this user submitted
-  handledLeads     Lead[]         @relation("LeadHandler") 
+  created_at                 DateTime          @default(now())
+  updated_at                 DateTime          @updatedAt
+  provider                   AuthProvider      @default(CREDENTIALS)
+  isDeleted                  Boolean           @default(false)
+  deletedAt                  DateTime?
+  last_login                 DateTime?
+  last_password_change       DateTime?
+  is_verified                Boolean           @default(false)
+  verification_notes         String?
+  verification_docs          Json?
+  address                    Json?
+  socials                    Json?
+  ActivityLog                ActivityLog[]
+  reviewsReceived            AgentReview[]     @relation("AgentReviewed")
+  agentReviews               AgentReview[]     @relation("AgentReviewer")
+  Articles                   Article[]
+  Comments                   Comment[]
+  handledLeads               Lead[]            @relation("LeadHandler")
+  submittedLeads             Lead[]            @relation("LeadSubmitter")
+  notifications              Notification[]
+  Payment                    Payment[]
+  PaystackCustomer           PaystackCustomer?
+  properties                 Property[]        @relation("user_properties")
+  propertyReviews            PropertyReview[]
+  saved_searches             SavedSearch[]
+  Subscriptions              Subscription[]
+  saved_articles             Article[]         @relation("saved_articles")
+  saved_properties           Property[]        @relation("saved_properties")
 
-
-  notifications Notification[]  
-  
-
-  saved_searches SavedSearch[]
-
-  Subscriptions Subscription[]
-
-  Payment Payment[]
-
-  PaystackCustomer PaystackCustomer?
-
-  agentReviews   AgentReview[] @relation("AgentReviewer")
-  reviewsReceived AgentReview[] @relation("AgentReviewed")
-
-  propertyReviews PropertyReview[]
-
-  ActivityLog ActivityLog[]
-
-  Articles Article[]
-  saved_articles  Article[]     @relation("saved_articles")  
-
-  Comments Comment[]
+   ReportsMade       Report[]         @relation("ReportsMade")      // reports the user filed
+  ReportsHandled    Report[]         @relation("ReportsHandled")   // reports handled by this admin
+  UserReports       Report[]         @relation("UserReports")      // reports where this user was the target
 }
 
-
 model Property {
-  id             String    @id @default(uuid())
-  agent       User?      @relation("user_properties", fields: [agentId], references: [id])  
-  agentId        String?
-  title          String
-  description    String
-  bedrooms       String
-  bathrooms      String
-  toilets        String
-  size_sqm       Float
-  price          Float
+  id               String           @id @default(uuid())
+  agentId          String?
+  title            String
+  description      String
+  bedrooms         String
+  bathrooms        String
+  toilets          String
+  size_sqm         Float
+  price            Float
   discount_percent Float?
   discounted_price Float?
-  property_type  PropertyType
-  listing_type   ListingType
-  furnishing     Furnishing
-  status         PropertyStatus
-  amenities      String[]
-  date_added     DateTime @default(now())
-  date_modified  DateTime @updatedAt
-  images         String[]
-  street    String
-  city      String
-  state     String
-  //TODO add postal code
-  lat Float?
-  lon Float?
-  parking_spaces  String?
-  saved_by     User[]    @relation("saved_properties")
-  approval_status    ApprovalStatus @default(pending)
-  approval_notes String?
-  isDeleted  Boolean  @default(false)
-  deletedAt DateTime? 
-  currency currency @default(NGN)
-  video_link String?
-//  For Rentals
-  availability   String?
-  tenancy_info String?
-  service_charge String?
-  min_tenancy String?
-  deposit Float?
-
-  leads Lead[]
-  visibility VisibilityLevel @default(low)
-  is_featured Boolean @default(false)
-  reviews PropertyReview[]
+  property_type    PropertyType
+  listing_type     ListingType
+  furnishing       Furnishing
+  status           PropertyStatus
+  amenities        String[]
+  date_added       DateTime         @default(now())
+  date_modified    DateTime         @updatedAt
+  images           String[]
+  street           String
+  city             String
+  state            String
+  lat              Float?
+  lon              Float?
+  parking_spaces   String?
+  approval_status  ApprovalStatus   @default(pending)
+  approval_notes   String?
+  isDeleted        Boolean          @default(false)
+  deletedAt        DateTime?
+  currency         currency         @default(NGN)
+  video_link       String?
+  availability     String?
+  tenancy_info     String?
+  service_charge   String?
+  min_tenancy      String?
+  deposit          Float?
+  visibility       VisibilityLevel  @default(low)
+  is_featured      Boolean          @default(false)
+  leads            Lead[]
+  agent            User?            @relation("user_properties", fields: [agentId], references: [id])
+  reviews          PropertyReview[]
+  saved_by         User[]           @relation("saved_properties")
+    PropertyReports   Report[]         @relation("PropertyReports")  // reports about this property
 }
 
 model Article {
-  id          String   @id @default(uuid())
+  id          String        @id @default(uuid())
   title       String
-  slug        String   @unique
-  contentHTML     String   // can be markdown or rich text (store raw)
-  contentJSON     String   // can be markdown or rich text (store raw)
-  // excerpt     String?  // short preview text
-  coverImage  String?  // URL of a cover image
+  slug        String        @unique
+  contentHTML String
+  contentJSON String
+  coverImage  String?
   status      ArticleStatus @default(DRAFT)
   editorNotes String?
-  views       Int @default(0)
+  views       Int           @default(0)
   authorId    String
-  author      User     @relation(fields: [authorId], references: [id])
   length      Int?
   publishedAt DateTime?
-  isDeleted   Boolean @default(false)
+  isDeleted   Boolean       @default(false)
   deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   tags        String[]
-  // tags        ArticleTag[] // many-to-many with tags
-
-  Comments Comment[]
-
-  User User[] @relation("saved_articles")
+  author      User          @relation(fields: [authorId], references: [id])
+  Comments    Comment[]
+  User        User[]        @relation("saved_articles")
 }
 
-model Comment{
-  id          String   @id @default(uuid())
+model Comment {
+  id          String    @id @default(uuid())
   comment     String
-  isDeleted   Boolean @default(false)
+  isDeleted   Boolean   @default(false)
   deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   commenterId String
-  commenter   User     @relation(fields: [commenterId], references: [id])
   articleId   String
-  article     Article @relation(fields: [articleId], references: [id])
+  article     Article   @relation(fields: [articleId], references: [id])
+  commenter   User      @relation(fields: [commenterId], references: [id])
 }
-
-// model ArticleTag {
-//   id       String     @id @default(uuid())
-//   name     String     @unique
-//   slug     String     @unique
-
-//   articles Article[] @relation("ArticleTags", references: [id])
-// }
-
-enum ArticleStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
-
 
 model Lead {
-  id          String    @id @default(uuid())
-  property    Property? @relation(fields: [propertyId], references: [id])
-  propertyId  String?
-  
-  // The user who submitted the lead (can be null if guest)
-  user        User?     @relation("LeadSubmitter", fields: [userId], references: [id])
-  userId      String?
-
-  // The agent assigned to handle the lead (nullable until assigned)
-  agent       User?     @relation("LeadHandler", fields: [agentId], references: [id])
-  agentId     String?
-
-  name        String?    
-  // Name of lead (if guest, they can leave name). For now since user needs to be registered, then this is optional
-  email       String?    // Email of lead Optional for now
-  message     String   // Optional inquiry message
-  status      LeadStatus @default(new)
+  id             String     @id @default(uuid())
+  propertyId     String?
+  userId         String?
+  agentId        String?
+  name           String?
+  email          String?
+  message        String
+  status         LeadStatus @default(new)
   closure_reason String?
-
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  agent          User?      @relation("LeadHandler", fields: [agentId], references: [id])
+  property       Property?  @relation(fields: [propertyId], references: [id])
+  user           User?      @relation("LeadSubmitter", fields: [userId], references: [id])
 }
 
 model Notification {
-  id          String   @id @default(uuid())
-  recipient   User     @relation(fields: [recipientId], references: [id])
-  recipientId String
-  title       String   @default("")
-  type        NotificationType @default(IN_APP)
-  message     String   @default("")
-  linkUrl     String?  // For in-app deep links (e.g., property, lead)
-  metadata    Json?    // For extra data (e.g., { propertyId: 'uuid' })
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  //TODO ADD THIS LATER
-  category        String?  // e.g., 'SUBSCRIPTION', 'PAYMENT'
-  relatedEntityId String?  // Links to payment or subscription ID
-  //   category String? // e.g., 'Lead', 'Property', 'SavedSearch'
-  // action String? // e.g., 'created', 'matched', 'replied'
-
+  id              String           @id @default(uuid())
+  recipientId     String
+  title           String           @default("")
+  type            NotificationType @default(IN_APP)
+  message         String           @default("")
+  linkUrl         String?
+  metadata        Json?
+  isRead          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  category        String?
+  relatedEntityId String?
+  recipient       User             @relation(fields: [recipientId], references: [id])
 }
 
 model SavedSearch {
-  id          String   @id @default(uuid())
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String
-
-  name        String?          // optional label for UI, e.g., "Lagos Apartments"
-  query       Json             // store query parameters (location, min/max price, etc.)
-  sendAlerts  Boolean @default(false)  // whether to notify when new matching listings appear
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  last_checked DateTime @default(now())
-
-  // optional: frequency, expiration, etc.
-
+  id             String           @id @default(uuid())
+  userId         String
+  name           String?
+  query          Json
+  sendAlerts     Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  last_checked   DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id])
   SearchAlertLog SearchAlertLog[]
 }
 
 model SearchAlertLog {
-   id          String   @id @default(uuid())
-  search      SavedSearch @relation(fields: [searchId], references: [id])
-  searchId    String
-  userId      String   // redundant but useful for indexing/filtering
-
+  id           String           @id @default(uuid())
+  searchId     String
+  userId       String
   result_count Int
-  method       NotificationType // IN_APP or EMAIL
-  notified_at  DateTime @default(now())
+  method       NotificationType
+  notified_at  DateTime         @default(now())
+  search       SavedSearch      @relation(fields: [searchId], references: [id])
 }
 
 model SubscriptionTier {
-  id       String   @id @default(uuid())
-  name     SubscriptionTierType @unique
-  features Json?
-  description String?
-  rank Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  subscriptions Subscription[]
+  id               String               @id @default(uuid())
+  name             SubscriptionTierType @unique
+  features         Json?
+  description      String?
+  rank             Int                  @default(0)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  subscriptions    Subscription[]
   SubscriptionPlan SubscriptionPlan[]
 }
 
 model Subscription {
-  id                      String   @id @default(uuid())
-  agent                   User     @relation(fields: [agentId], references: [id])
-  agentId                 String
-  plan                    SubscriptionTier @relation(fields: [planId], references: [id])
-  planId                  String
-  startDate               DateTime
-  endDate                 DateTime?
-  isActive                Boolean  @default(true)
-  manuallyGranted         Boolean  @default(false)
-
-  // 🧾 Recurring Billing Metadata
-  paystackPlanCode         String?     // From Paystack plan object
-  paystackSubscriptionCode String? @unique    // From Paystack subscription object
-  paystackCustomerCode     String?     // From Paystack customer (for future charges)
-  paystackEmailToken       String?     // Used in confirmation URLs (optional)
-  paystackInvoiceToken     String?     // Token for invoice view/download
-  nextPaymentDate          DateTime?   // When next billing is due
-  gracePeriodEndDate      DateTime? // This is the new field
-
-  createdAt                DateTime @default(now())
+  id                       String           @id @default(uuid())
+  agentId                  String
+  planId                   String
+  startDate                DateTime
+  endDate                  DateTime?
+  isActive                 Boolean          @default(true)
+  manuallyGranted          Boolean          @default(false)
+  paystackPlanCode         String?
+  paystackSubscriptionCode String?          @unique
+  paystackCustomerCode     String?
+  paystackEmailToken       String?
+  paystackInvoiceToken     String?
+  nextPaymentDate          DateTime?
+  gracePeriodEndDate       DateTime?
+  createdAt                DateTime         @default(now())
   payments                 Payment[]
+  agent                    User             @relation(fields: [agentId], references: [id])
+  plan                     SubscriptionTier @relation(fields: [planId], references: [id])
 }
 
 model PaystackCustomer {
-  userId       String   @id
-  customerCode String   @unique
-  user         User     @relation(fields: [userId], references: [id])
+  userId       String @id
+  customerCode String @unique
+  user         User   @relation(fields: [userId], references: [id])
 }
 
-
 model SubscriptionPlan {
-  id        String            @id @default(uuid())
-  tier      SubscriptionTier  @relation(fields: [tierId], references: [id])
-  tierId    String
-  duration  Duration
-  price     Int
-  createdAt DateTime          @default(now())
+  id               String           @id @default(uuid())
+  tierId           String
+  duration         Duration
+  price            Int
+  createdAt        DateTime         @default(now())
   paystackPlanCode String?
+  tier             SubscriptionTier @relation(fields: [tierId], references: [id])
 }
 
 model Payment {
-  id              String         @id @default(uuid())
-  user            User           @relation(fields: [userId], references: [id])
-  userId          String
-  subscription    Subscription?  @relation(fields: [subscriptionId], references: [id])
-  subscriptionId  String?
-  amount          Int
-  currency        String         @default("NGN")
-  status          PaymentStatus  @default(PENDING)
-  reference       String         @unique
-  purpose         PaymentPurpose @default(SUBSCRIPTION)
-  provider        PaymentProvider
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime?
+  id             String          @id @default(uuid())
+  userId         String
+  subscriptionId String?
+  amount         Int
+  currency       String          @default("NGN")
+  status         PaymentStatus   @default(PENDING)
+  reference      String          @unique
+  purpose        PaymentPurpose  @default(SUBSCRIPTION)
+  provider       PaymentProvider
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime?
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
+  user           User            @relation(fields: [userId], references: [id])
 }
 
 model AgentReview {
-  id          String   @id @default(uuid())
-  reviewer    User     @relation("AgentReviewer", fields: [reviewerId], references: [id])
-  reviewerId  String
-  agent       User     @relation("AgentReviewed", fields: [agentId], references: [id])
-  agentId     String
-  rating      Int      // 1 to 5 stars
-  comment     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  reviewerId String
+  agentId    String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  agent      User     @relation("AgentReviewed", fields: [agentId], references: [id])
+  reviewer   User     @relation("AgentReviewer", fields: [reviewerId], references: [id])
 }
 
 model PropertyReview {
-  id          String   @id @default(uuid())
-  reviewer    User     @relation(fields: [reviewerId], references: [id])
-  reviewerId  String
-  property    Property @relation(fields: [propertyId], references: [id])
-  propertyId  String
-  rating      Int      // 1 to 5 stars
-  comment     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  reviewerId String
+  propertyId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  property   Property @relation(fields: [propertyId], references: [id])
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
 }
 
 model ActivityLog {
-  id          String            @id @default(uuid())
+  id          String           @id @default(uuid())
   userId      String?
   category    ActivityCategory
   action      String
@@ -357,9 +303,60 @@ model ActivityLog {
   userAgent   String?
   changes     Json?
   metadata    Json?
-  createdAt   DateTime           @default(now())
+  createdAt   DateTime         @default(now())
+  user        User?            @relation(fields: [userId], references: [id])
+}
 
-  user User? @relation(fields: [userId], references: [id])
+model Report {
+  id          String       @id @default(uuid())
+  reporterId  String?
+  targetType  ReportTarget
+  reason      ReportReason
+  message     String?
+  attachments Json?
+  status      ReportStatus @default(NEW)
+  adminNotes  String?
+  actionTaken String?
+  handledById String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+   // Relations
+  reporter         User?        @relation("ReportsMade", fields: [reporterId], references: [id])
+  handledBy        User?        @relation("ReportsHandled", fields: [handledById], references: [id])
+  targetUser       User?        @relation("UserReports", fields: [targetUserId], references: [id])
+  targetUserId     String?
+  targetProperty   Property?    @relation("PropertyReports", fields: [targetPropertyId], references: [id])
+  targetPropertyId String?
+  @@index([status, createdAt])
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportTarget {
+  PROPERTY
+  AGENT
+}
+
+enum ReportReason {
+  FRAUD
+  FALSE_LISTING
+  ILLEGAL_ACTIVITY
+  SPAM
+  INAPPROPRIATE_CONTENT
+  OTHER
+}
+
+enum ReportStatus {
+  NEW
+  UNDER_REVIEW
+  ACTIONED
+  DISMISSED
 }
 
 enum ActivityCategory {
@@ -376,7 +373,6 @@ enum currency {
   NGN
 }
 
-
 enum PaymentStatus {
   PENDING
   SUCCESS
@@ -387,17 +383,14 @@ enum PaymentStatus {
 
 enum PaymentProvider {
   PAYSTACK
-  // STRIPE
   FLUTTERWAVE
   MANUAL
 }
-
 
 enum NotificationType {
   IN_APP
   EMAIL
 }
-
 
 enum LeadStatus {
   new
@@ -448,10 +441,12 @@ enum PropertyStatus {
 }
 
 enum SubscriptionTierType {
-  basic
+  standard
+  pro
   premium
-  enterprise
 }
+
+
 enum ApprovalStatus {
   approved
   pending
@@ -459,9 +454,9 @@ enum ApprovalStatus {
 }
 
 enum VisibilityLevel {
-  low     // For basic
-  medium  // For premium
-  high    // For enterprise
+  low
+  medium
+  high
 }
 
 enum PaymentPurpose {
@@ -471,7 +466,8 @@ enum PaymentPurpose {
   CUSTOM
 }
 
-enum AuthProvider{
+enum AuthProvider {
   GOOGLE
   CREDENTIALS
 }
+
