@@ -32,6 +32,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import { propertyValidationSchema } from '../utils/schema';
 import z from 'zod';
+import { authRateLimiterMiddleware } from '../utils/AuthRateLimiter';
 
 // ✅ Define type for property row (inferred from Zod)
 type PropertyInput = z.infer<typeof propertyValidationSchema>;
@@ -76,6 +77,7 @@ const upload = multer({
 
 agentRouter.post(
   '/signup',
+  authRateLimiterMiddleware,
   asyncHandler(async (req, res) => {
     const { name, email, phone_number, password, verification_docs, username } =
       req.body as {
@@ -194,6 +196,8 @@ agentRouter.get(
 // Agent Sign in
 agentRouter.post(
   '/signin',
+  authRateLimiterMiddleware,
+
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
@@ -262,6 +266,8 @@ agentRouter.post(
 
 agentRouter.post(
   '/verify-2fa',
+  authRateLimiterMiddleware,
+
   asyncHandler(async (req, res) => {
     const { userId, code } = req.body;
     const now = new Date();
@@ -687,6 +693,7 @@ agentRouter.get(
 
     const where: any = {
       agentId: agentId,
+      isDeleted: false,
     };
 
     // --- UPDATED: Handle comma-separated approvalStatus values ---

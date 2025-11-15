@@ -14,6 +14,7 @@ import {
   sendVerificationEmail,
 } from '../utils/utils';
 import crypto from 'crypto';
+import { authRateLimiterMiddleware } from '../utils/AuthRateLimiter';
 
 const prisma = new PrismaClient();
 
@@ -22,7 +23,7 @@ const userRouter = express.Router();
 //Google Auth
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID!);
 
-//TODO - FIX CONTROLLERS, VERIFY EMAIL, SOFT DELETE
+//TODO - FIX CONTROLLERS, VERIFY EMAIL
 
 //Get an agent
 userRouter.get(
@@ -84,6 +85,7 @@ userRouter.get(
 
 userRouter.post(
   '/signup',
+  authRateLimiterMiddleware,
   asyncHandler(async (req, res) => {
     const { name, email, password, phone_number } = req.body;
 
@@ -139,6 +141,7 @@ userRouter.post(
 
 userRouter.get(
   '/resend-verification',
+  authRateLimiterMiddleware,
   isAuth,
   asyncHandler(async (req, res) => {
     const { id } = req.user;
@@ -186,59 +189,29 @@ userRouter.post(
   })
 );
 
-// // Signin Route
-// userRouter.post(
-//   '/signin',
-//   asyncHandler(async (req, res) => {
-//     const { email, password } = req.body;
+userRouter.post(
+  '/signout',
+  asyncHandler(async (req, res) => {
+    // Clear your auth cookie (example: "userInfo")
+    res.clearCookie('userInfo', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none', // or "lax" depending on your frontend setup
+      path: '/', // IMPORTANT: path must match cookie creation path
+    });
 
-//     const user = await prisma.user.findUnique({
-//       where: { email },
-//       include: {
-//         saved_searches: { select: { id: true } },
-//         saved_properties: {
-//           select: { id: true },
-//         },
-//       },
-//     });
-//     if (!user) {
-//       res.status(400).send({ message: 'Invalid email or password' });
-//       return; // Added return to stop execution
-//     }
-//     const isMatch = await bcrypt.compare(password, user.password_hash);
-//     if (!isMatch) {
-//       res.status(400).send({ message: 'Invalid email or password' });
-//       return; // Added return to stop execution
-//     }
-//     const verificationToken = nanoid(32);
-
-//     const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${verificationToken}`;
-
-//     sendVerificationEmail({ email, verifyUrl });
-
-//     const token = generateToken({ id: user.id, role: user.role });
-//     const savedPropertyIds = user.saved_properties.map((prop) => prop.id);
-//     const savedSearchesIds = user.saved_searches.map((search) => search.id);
-//     res.status(200).json({
-//       message: 'Signin successful',
-//       user: {
-//         id: user.id,
-//         name: user.name,
-//         email: user.email,
-//         role: user.role,
-//         phone_number: user.phone_number,
-//         saved_properties: savedPropertyIds,
-//         saved_searches: savedSearchesIds,
-//         emailVerified: user.emailVerified,
-//       },
-//       token,
-//       isSignedIn: true,
-//     });
-//   })
-// );
+    res.status(200).json({
+      status: 'success',
+      message: 'Signed out successfully',
+    });
+    return;
+  })
+);
 
 userRouter.post(
   '/signin',
+  authRateLimiterMiddleware,
+
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     const now = new Date();
@@ -342,6 +315,8 @@ userRouter.post(
 
 userRouter.post(
   '/resend-2fa',
+  authRateLimiterMiddleware,
+
   // isAuth, // must be logged in
   asyncHandler(async (req, res) => {
     const { userId } = req.body;
@@ -383,6 +358,8 @@ userRouter.post(
 
 userRouter.post(
   '/verify-2fa',
+  authRateLimiterMiddleware,
+
   asyncHandler(async (req, res) => {
     const { userId, code } = req.body;
     const now = new Date();
@@ -568,6 +545,7 @@ userRouter.post(
 //forgot passoword
 userRouter.post(
   '/forgot-password',
+  authRateLimiterMiddleware,
   asyncHandler(async (req, res) => {
     const { email } = req.body;
 
@@ -600,6 +578,7 @@ userRouter.post(
 );
 userRouter.post(
   '/send-change-password-otp',
+  authRateLimiterMiddleware,
   isAuth,
   asyncHandler(async (req, res) => {
     const { email } = req.body;
@@ -636,6 +615,7 @@ userRouter.post(
 //reset password
 userRouter.post(
   '/change-password',
+  authRateLimiterMiddleware,
   isAuth,
   asyncHandler(async (req, res) => {
     const { userId, newPassword } = req.body;
@@ -679,6 +659,7 @@ userRouter.post(
 
 userRouter.post(
   '/verify-change-password-otp',
+  authRateLimiterMiddleware,
   asyncHandler(async (req, res) => {
     const { userId, code } = req.body;
 
