@@ -36,6 +36,8 @@ propertyRouter.get(
       limit = '10',
     } = req.query as Record<string, any>;
 
+    console.log('search');
+
     const filters: any[] = [];
     console.log(`${req.query?.lengtth ?? 'No queries'}`);
 
@@ -284,7 +286,11 @@ propertyRouter.get(
 
       // 3. Fetch all filtered properties
       const allFilteredProps = await prisma.property.findMany({
-        where,
+        where: {
+          approval_status: 'approved',
+          agent: { is_verified: true },
+          ...where,
+        },
         include: {
           reviews: true, // optional, remove if not needed
         },
@@ -322,17 +328,23 @@ propertyRouter.get(
 
     const [properties, totalItems] = await prisma.$transaction([
       prisma.property.findMany({
-        where,
+        where: {
+          approval_status: 'approved',
+          agent: { is_verified: true },
+          ...where,
+        },
         skip,
         take: pageSize,
         orderBy,
       }),
       prisma.property.count({
-        where,
+        where: {
+          approval_status: 'approved',
+          agent: { is_verified: true },
+          ...where,
+        },
       }),
     ]);
-    console.log('Final filters:', JSON.stringify(filters, null, 2));
-    console.log('Final orderBy:', orderBy);
 
     res.json({
       properties,
@@ -344,34 +356,34 @@ propertyRouter.get(
   })
 );
 
-propertyRouter.get(
-  '/:listingType',
-  asyncHandler(async (req, res) => {
-    const { listingType } = req.params;
+// propertyRouter.get(
+//   '/:listingType',
+//   asyncHandler(async (req, res) => {
+//     const { listingType } = req.params;
 
-    if (
-      listingType !== 'sale' &&
-      listingType !== 'rent' &&
-      listingType !== 'shortlet'
-    ) {
-      res.status(400);
-      throw new Error('Invalid listing type. Use "sale" or "rent".');
-    }
+//     if (
+//       listingType !== 'sale' &&
+//       listingType !== 'rent' &&
+//       listingType !== 'shortlet'
+//     ) {
+//       res.status(400);
+//       throw new Error('Invalid listing type. Use "sale" or "rent".');
+//     }
 
-    const properties = await prisma.property.findMany({
-      where: {
-        listing_type: listingType,
-      },
-      include: {
-        agent: {
-          select: { id: true, name: true }, // example: include minimal agent info
-        },
-      },
-    });
+//     const properties = await prisma.property.findMany({
+//       where: {
+//         listing_type: listingType,
+//       },
+//       include: {
+//         agent: {
+//           select: { id: true, name: true }, // example: include minimal agent info
+//         },
+//       },
+//     });
 
-    res.status(200).json(properties);
-  })
-);
+//     res.status(200).json(properties);
+//   })
+// );
 
 propertyRouter.get(
   '/id/:id',
@@ -379,7 +391,11 @@ propertyRouter.get(
     const { id } = req.params;
 
     const property = await prisma.property.findUnique({
-      where: { id: id },
+      where: {
+        id: id,
+        approval_status: 'approved',
+        agent: { is_verified: true },
+      },
       include: {
         agent: true,
         reviews: {
@@ -413,7 +429,11 @@ propertyRouter.post(
     const { id } = req.params;
 
     const property = await prisma.property.findUnique({
-      where: { id: id },
+      where: {
+        id: id,
+        approval_status: 'approved',
+        agent: { is_verified: true },
+      },
     });
 
     if (!property) {
@@ -448,7 +468,9 @@ propertyRouter.delete(
     const userId = req.user?.id;
     const { id } = req.params;
 
-    const property = await prisma.property.findUnique({ where: { id } });
+    const property = await prisma.property.findUnique({
+      where: { id, approval_status: 'approved', agent: { is_verified: true } },
+    });
 
     const user = await prisma.user.update({
       where: { id: userId },
@@ -487,7 +509,7 @@ propertyRouter.post(
       return;
     }
 
-    if (property.reviews.find((x) => x.reviewerId === req.user.id)) {
+    if (property.reviews.find((x) => x.reviewerId === req.user?.id)) {
       res.status(400).send({ message: 'You already submitted a review' });
       return;
     }

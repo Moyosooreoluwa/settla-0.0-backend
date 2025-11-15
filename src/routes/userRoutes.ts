@@ -1106,6 +1106,7 @@ userRouter.get(
             contains: search,
             mode: 'insensitive',
           },
+          is_verified: true,
         },
         include: {
           properties: true,
@@ -1143,6 +1144,7 @@ userRouter.get(
       prisma.user.findMany({
         where: {
           role: 'agent' as const,
+          is_verified: true,
           name: {
             contains: search,
             mode: 'insensitive',
@@ -1160,6 +1162,7 @@ userRouter.get(
       prisma.user.count({
         where: {
           role: 'agent' as const,
+          is_verified: true,
           name: {
             contains: search,
             mode: 'insensitive',
@@ -1189,6 +1192,7 @@ userRouter.get(
     res.json(notifications);
   })
 );
+
 userRouter.put(
   '/my-notifications/read',
   isAuth,
